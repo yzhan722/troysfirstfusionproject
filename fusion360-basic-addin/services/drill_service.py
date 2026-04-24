@@ -1,5 +1,6 @@
 import adsk.core
 import adsk.fusion
+import math
 
 from core.models import BodyModel
 
@@ -47,6 +48,7 @@ class DrillService:
         body_a = model_a.source_body
         body_b = model_b.source_body
         candidates = self._contact_candidates(body_a, body_b)
+        candidates.sort(key=lambda c: (c["gap"], -c["ov1"] * c["ov2"]))
         for c in candidates:
             if c["gap"] > 0.5:
                 continue
@@ -59,53 +61,114 @@ class DrillService:
                 if h_axis != axis or v_axis == axis:
                     continue
 
-                target_face = self._nearest_planar_face(horizontal, axis, c["plane_coord"])
+                contact_face = self._face_toward_body(horizontal, vertical, axis)
+                if not contact_face:
+                    continue
+
+                target_face = self._opposite_face(horizontal, axis, contact_face)
                 if not target_face:
                     continue
 
-                pts = self._hole_points(c)
+                face_plane = adsk.core.Plane.cast(target_face.geometry)
+                if not face_plane:
+                    continue
+                target_plane_coord = [face_plane.origin.x * 10.0, face_plane.origin.y * 10.0, face_plane.origin.z * 10.0][axis]
+
+                pts = self._hole_points(c, target_plane_coord)
                 if not pts:
                     continue
 
-                n = self._create_holes(horizontal, target_face, pts, diameter_mm=3.0)
+                n = self._create_holes(
+                    horizontal,
+                    target_face,
+                    pts,
+                    diameter_mm=3.0,
+                    depth_mm=horizontal_model.thickness_mm,
+                )
                 if n > 0:
-                    return n, "{} <- {} | holes:{} | gap:{:.3f}mm".format(
-                        horizontal_model.name, vertical_model.name, n, c["gap"]
+                    return n, "{} <- {} | holes:{} | gap:{:.3f}mm | profile:back-face".format(
+                        horizontal_model.name,
+                        vertical_model.name,
+                        n,
+                        c["gap"],
                     )
         return 0, ""
 
-    def _create_holes(self, target_body, target_face, points_mm, diameter_mm):
+    def _create_holes(self, target_body, target_face, points_mm, diameter_mm, depth_mm):
         body = getattr(target_body, "nativeObject", None) or target_body
         face = getattr(target_face, "nativeObject", None) or target_face
         comp = body.parentComponent
         if not comp:
             return 0
 
-        l, w, h = self.fusion.dims_mm(body)
-        depth_cm = (min(l, w, h)) / 10.0
-        dia_cm = diameter_mm / 10.0
+        depth_cm = depth_mm / 10.0
+        radius_cm = (diameter_mm * 0.5) / 10.0
 
         sketch = comp.sketches.add(face)
         sketch.name = "TroyPlugin_HoleSketch"
-        points = adsk.core.ObjectCollection.create()
+        circles = sketch.sketchCurves.sketchCircles
         for p in points_mm:
             world = adsk.core.Point3D.create(p[0] / 10.0, p[1] / 10.0, p[2] / 10.0)
             sp = sketch.modelToSketchSpace(world)
-            points.add(sketch.sketchPoints.add(sp))
+            circles.addByCenterRadius(sp, radius_cm)
 
-        if points.count == 0:
+        expected_area_cm2 = math.pi * (radius_cm**2)
+        circle_profiles = self._circle_profiles(sketch, expected_area_cm2)
+        if not circle_profiles:
             return 0
 
-        holes = comp.features.holeFeatures
+        plane = adsk.core.Plane.cast(face.geometry)
+        if not plane:
+            return 0
+        body_bbox = body.boundingBox
+        body_center = adsk.core.Point3D.create(
+            (body_bbox.minPoint.x + body_bbox.maxPoint.x) * 0.5,
+            (body_bbox.minPoint.y + body_bbox.maxPoint.y) * 0.5,
+            (body_bbox.minPoint.z + body_bbox.maxPoint.z) * 0.5,
+        )
+        to_center = adsk.core.Vector3D.create(
+            body_center.x - plane.origin.x, body_center.y - plane.origin.y, body_center.z - plane.origin.z
+        )
+        inward_sign = 1.0 if to_center.dotProduct(plane.normal) >= 0 else -1.0
+
+        extrudes = comp.features.extrudeFeatures
+        combines = comp.features.combineFeatures
+        created = 0
         try:
-            inp = holes.createSimpleInput(adsk.core.ValueInput.createByReal(dia_cm))
-            inp.setPositionBySketchPoints(points)
-            inp.setDistanceExtent(adsk.core.ValueInput.createByReal(depth_cm))
-            feat = holes.add(inp)
-            feat.name = "TroyPlugin_HoleFeature"
-            return points.count
+            for idx, profile in enumerate(circle_profiles):
+                tool_inp = extrudes.createInput(profile, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+                tool_inp.setDistanceExtent(False, adsk.core.ValueInput.createByReal(depth_cm * inward_sign))
+                tool_feat = extrudes.add(tool_inp)
+                tool_feat.name = "TroyPlugin_HoleToolFeature_{}".format(idx + 1)
+
+                if not tool_feat.bodies or tool_feat.bodies.count == 0:
+                    continue
+
+                tool_bodies = adsk.core.ObjectCollection.create()
+                tool_bodies.add(tool_feat.bodies.item(0))
+                combine_inp = combines.createInput(body, tool_bodies)
+                combine_inp.operation = adsk.fusion.FeatureOperations.CutFeatureOperation
+                combine_inp.isKeepToolBodies = False
+                feat = combines.add(combine_inp)
+                feat.name = "TroyPlugin_HoleFeature_{}".format(idx + 1)
+                created += 1
+            return created
         except:
             return 0
+
+    def _circle_profiles(self, sketch, expected_area_cm2):
+        matches = []
+        tolerance = max(expected_area_cm2 * 0.25, 0.001)
+        for i in range(sketch.profiles.count):
+            profile = sketch.profiles.item(i)
+            try:
+                area = profile.areaProperties(adsk.fusion.CalculationAccuracy.LowCalculationAccuracy).area
+            except:
+                continue
+            if abs(area - expected_area_cm2) <= tolerance:
+                matches.append((abs(area - expected_area_cm2), profile))
+        matches.sort(key=lambda item: item[0])
+        return [profile for _, profile in matches]
 
     def _contact_candidates(self, a_body, b_body):
         a = a_body.boundingBox
@@ -151,7 +214,7 @@ class DrillService:
             )
         return out
 
-    def _hole_points(self, c):
+    def _hole_points(self, c, plane_coord_mm):
         p1, p2 = c["plane_axes"][0], c["plane_axes"][1]
         len1, len2 = c["ov1"], c["ov2"]
         if len1 >= len2:
@@ -172,11 +235,74 @@ class DrillService:
         pts = []
         for t in (1.0 / 6.0, 3.0 / 6.0, 5.0 / 6.0):
             coords = [0.0, 0.0, 0.0]
-            coords[c["axis"]] = c["plane_coord"]
+            coords[c["axis"]] = plane_coord_mm
             coords[long_axis] = long_min + long_len * t
             coords[short_axis] = short_mid
             pts.append(coords)
         return pts
+
+    def _face_toward_body(self, source_body, target_body, axis):
+        source_bbox = source_body.boundingBox
+        target_bbox = target_body.boundingBox
+        source_center = [
+            (source_bbox.minPoint.x + source_bbox.maxPoint.x) * 5.0,
+            (source_bbox.minPoint.y + source_bbox.maxPoint.y) * 5.0,
+            (source_bbox.minPoint.z + source_bbox.maxPoint.z) * 5.0,
+        ]
+        target_center = [
+            (target_bbox.minPoint.x + target_bbox.maxPoint.x) * 5.0,
+            (target_bbox.minPoint.y + target_bbox.maxPoint.y) * 5.0,
+            (target_bbox.minPoint.z + target_bbox.maxPoint.z) * 5.0,
+        ]
+        prefer_negative = target_center[axis] < source_center[axis]
+
+        best = None
+        best_score = None
+        for i in range(source_body.faces.count):
+            face = source_body.faces.item(i)
+            plane = adsk.core.Plane.cast(face.geometry)
+            if not plane:
+                continue
+            normal = [abs(plane.normal.x), abs(plane.normal.y), abs(plane.normal.z)]
+            n_axis = normal.index(max(normal))
+            if n_axis != axis:
+                continue
+            coord = [plane.origin.x * 10.0, plane.origin.y * 10.0, plane.origin.z * 10.0][axis]
+            outward_sign = 1 if [plane.normal.x, plane.normal.y, plane.normal.z][axis] >= 0 else -1
+            score = (
+                0 if ((prefer_negative and outward_sign < 0) or ((not prefer_negative) and outward_sign > 0)) else 1,
+                abs(coord - target_center[axis]),
+            )
+            if best_score is None or score < best_score:
+                best_score = score
+                best = face
+        return best
+
+    def _opposite_face(self, body, axis, reference_face):
+        ref_plane = adsk.core.Plane.cast(reference_face.geometry)
+        if not ref_plane:
+            return None
+        ref_coord = [ref_plane.origin.x * 10.0, ref_plane.origin.y * 10.0, ref_plane.origin.z * 10.0][axis]
+
+        best = None
+        best_dist = -1.0
+        for i in range(body.faces.count):
+            face = body.faces.item(i)
+            if face == reference_face:
+                continue
+            plane = adsk.core.Plane.cast(face.geometry)
+            if not plane:
+                continue
+            normal = [abs(plane.normal.x), abs(plane.normal.y), abs(plane.normal.z)]
+            n_axis = normal.index(max(normal))
+            if n_axis != axis:
+                continue
+            coord = [plane.origin.x * 10.0, plane.origin.y * 10.0, plane.origin.z * 10.0][axis]
+            dist = abs(coord - ref_coord)
+            if dist > best_dist:
+                best_dist = dist
+                best = face
+        return best
 
     def _nearest_planar_face(self, body, axis, plane_coord_mm):
         best = None

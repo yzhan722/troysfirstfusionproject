@@ -26,6 +26,26 @@ class RestoreService:
                 pass
 
             try:
+                extrudes = comp.features.extrudeFeatures
+                for i in range(extrudes.count - 1, -1, -1):
+                    feat = extrudes.item(i)
+                    if feat.name.startswith("TroyPlugin_HoleFeature") or feat.name.startswith("TroyPlugin_HoleToolFeature"):
+                        feat.deleteMe()
+                        removed_holes += 1
+            except:
+                pass
+
+            try:
+                combines = comp.features.combineFeatures
+                for i in range(combines.count - 1, -1, -1):
+                    feat = combines.item(i)
+                    if feat.name.startswith("TroyPlugin_HoleFeature"):
+                        feat.deleteMe()
+                        removed_holes += 1
+            except:
+                pass
+
+            try:
                 sketches = comp.sketches
                 for i in range(sketches.count - 1, -1, -1):
                     sk = sketches.item(i)
