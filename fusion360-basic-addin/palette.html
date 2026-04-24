@@ -21,6 +21,7 @@
 <body>
   <div class="row">
     <button id="scanBtn">Scan</button>
+    <button id="applyColorBtn">Apply Color</button>
     <button id="select15Btn">Select 15mm</button>
     <button id="select18Btn">Select 18mm</button>
     <button id="selectOtherBtn">Select Other</button>
@@ -34,6 +35,7 @@
   <script>
     const result = document.getElementById('result');
     const scanBtn = document.getElementById('scanBtn');
+    const applyColorBtn = document.getElementById('applyColorBtn');
     const select15Btn = document.getElementById('select15Btn');
     const select18Btn = document.getElementById('select18Btn');
     const selectOtherBtn = document.getElementById('selectOtherBtn');
@@ -51,6 +53,7 @@
     }
 
     scanBtn.addEventListener('click', () => send('scan'));
+    applyColorBtn.addEventListener('click', () => send('applyColor'));
     select15Btn.addEventListener('click', () => send('select15'));
     select18Btn.addEventListener('click', () => send('select18'));
     selectOtherBtn.addEventListener('click', () => send('selectOther'));
@@ -62,11 +65,15 @@
     window.fusionJavaScriptHandler = {
       handle: function(action, data) {
         if (action !== 'scanResult') return;
+        if (!data || !String(data).trim()) return;
         try {
           const parsed = JSON.parse(data);
-          result.textContent = parsed.text || '';
+          if (parsed && typeof parsed.text === 'string' && parsed.text.trim()) {
+            result.textContent = parsed.text;
+          }
         } catch (e) {
-          result.textContent = data || '';
+          const text = String(data || '');
+          if (text.trim()) result.textContent = text;
         }
       }
     };
