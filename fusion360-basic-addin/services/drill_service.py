@@ -3,6 +3,7 @@ import adsk.fusion
 import math
 
 from core.models import BodyModel
+from config import ATTRIBUTE_GROUP
 
 
 class DrillService:
@@ -78,18 +79,26 @@ class DrillService:
                 if not pts:
                     continue
 
+                depth_mm = horizontal_model.thickness_mm
+                inward_sign = self._inward_sign(horizontal, target_face)
+                safe_pts = [p for p in pts if not self._hits_recorded_full_tongue(p, vertical, horizontal_model, axis)]
+                if not safe_pts:
+                    continue
+
                 n = self._create_holes(
                     horizontal,
                     target_face,
-                    pts,
+                    safe_pts,
                     diameter_mm=3.0,
-                    depth_mm=horizontal_model.thickness_mm,
+                    depth_mm=depth_mm,
                 )
                 if n > 0:
-                    return n, "{} <- {} | holes:{} | gap:{:.3f}mm | profile:back-face".format(
+                    skipped = len(pts) - len(safe_pts)
+                    return n, "{} <- {} | holes:{} | skipped:{} | gap:{:.3f}mm | profile:back-face".format(
                         horizontal_model.name,
                         vertical_model.name,
                         n,
+                        skipped,
                         c["gap"],
                     )
         return 0, ""
@@ -117,19 +126,9 @@ class DrillService:
         if not circle_profiles:
             return 0
 
-        plane = adsk.core.Plane.cast(face.geometry)
-        if not plane:
+        inward_sign = self._inward_sign(body, face)
+        if inward_sign is None:
             return 0
-        body_bbox = body.boundingBox
-        body_center = adsk.core.Point3D.create(
-            (body_bbox.minPoint.x + body_bbox.maxPoint.x) * 0.5,
-            (body_bbox.minPoint.y + body_bbox.maxPoint.y) * 0.5,
-            (body_bbox.minPoint.z + body_bbox.maxPoint.z) * 0.5,
-        )
-        to_center = adsk.core.Vector3D.create(
-            body_center.x - plane.origin.x, body_center.y - plane.origin.y, body_center.z - plane.origin.z
-        )
-        inward_sign = 1.0 if to_center.dotProduct(plane.normal) >= 0 else -1.0
 
         extrudes = comp.features.extrudeFeatures
         combines = comp.features.combineFeatures
@@ -277,6 +276,80 @@ class DrillService:
                 best_score = score
                 best = face
         return best
+
+    def _inward_sign(self, body, face):
+        plane = adsk.core.Plane.cast(face.geometry)
+        if not plane:
+            return None
+        body_bbox = body.boundingBox
+        body_center = adsk.core.Point3D.create(
+            (body_bbox.minPoint.x + body_bbox.maxPoint.x) * 0.5,
+            (body_bbox.minPoint.y + body_bbox.maxPoint.y) * 0.5,
+            (body_bbox.minPoint.z + body_bbox.maxPoint.z) * 0.5,
+        )
+        to_center = adsk.core.Vector3D.create(
+            body_center.x - plane.origin.x, body_center.y - plane.origin.y, body_center.z - plane.origin.z
+        )
+        return 1.0 if to_center.dotProduct(plane.normal) >= 0 else -1.0
+
+    def _hits_recorded_full_tongue(self, point_mm, vertical_body, mate_model, axis):
+        attrs = vertical_body.attributes
+        variant = attrs.itemByName(ATTRIBUTE_GROUP, "joinery_variant")
+        role = attrs.itemByName(ATTRIBUTE_GROUP, "joinery_role")
+        mate = attrs.itemByName(ATTRIBUTE_GROUP, "joinery_mate_token")
+        stored_axis = attrs.itemByName(ATTRIBUTE_GROUP, "joinery_axis")
+        if not variant or variant.value != "full":
+            return False
+        if not role or role.value != "vertical":
+            return False
+        mate_token = getattr(mate_model, "token", None)
+        if not mate_token and getattr(mate_model, "source_body", None):
+            mate_token = mate_model.source_body.entityToken
+        if not mate or mate.value != mate_token:
+            return False
+        if not stored_axis or stored_axis.value != str(axis):
+            return False
+
+        try:
+            center_mm = [
+                float(attrs.itemByName(ATTRIBUTE_GROUP, "joinery_center_x_mm").value),
+                float(attrs.itemByName(ATTRIBUTE_GROUP, "joinery_center_y_mm").value),
+                float(attrs.itemByName(ATTRIBUTE_GROUP, "joinery_center_z_mm").value),
+            ]
+            tongue_length_mm = float(attrs.itemByName(ATTRIBUTE_GROUP, "joinery_tongue_length_mm").value)
+            tongue_width_mm = float(attrs.itemByName(ATTRIBUTE_GROUP, "joinery_tongue_width_mm").value)
+        except:
+            return False
+
+        contact_face = self._face_toward_body(vertical_body, mate_model.source_body, axis)
+        if not contact_face:
+            return False
+        plane = adsk.core.Plane.cast(contact_face.geometry)
+        if not plane:
+            return False
+
+        x_axis, y_axis = self._plane_basis(plane.normal)
+        delta = adsk.core.Vector3D.create(
+            (point_mm[0] - center_mm[0]) / 10.0,
+            (point_mm[1] - center_mm[1]) / 10.0,
+            (point_mm[2] - center_mm[2]) / 10.0,
+        )
+        local_x_mm = delta.dotProduct(x_axis) * 10.0
+        local_y_mm = delta.dotProduct(y_axis) * 10.0
+        return (abs(local_x_mm) <= (tongue_width_mm * 0.5 + 1.5)) and (
+            abs(local_y_mm) <= (tongue_length_mm * 0.5 + 1.5)
+        )
+
+    def _plane_basis(self, normal):
+        z_axis = adsk.core.Vector3D.create(0, 0, 1)
+        x_axis = z_axis.crossProduct(normal)
+        if x_axis.length < 1e-6:
+            y_seed = adsk.core.Vector3D.create(0, 1, 0)
+            x_axis = y_seed.crossProduct(normal)
+        x_axis.normalize()
+        y_axis = normal.crossProduct(x_axis)
+        y_axis.normalize()
+        return x_axis, y_axis
 
     def _opposite_face(self, body, axis, reference_face):
         ref_plane = adsk.core.Plane.cast(reference_face.geometry)

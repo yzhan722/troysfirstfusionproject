@@ -28,6 +28,7 @@
     <button id="detectContactsBtn">Detect Contacts</button>
     <button id="drillHolesBtn">Drill Holes</button>
     <button id="halfSlotBtn">Half Slot</button>
+    <button id="fullSlotBtn">Full Slot</button>
     <button id="restoreBtn">Restore</button>
   </div>
   <div id="result">Click Scan to list bodies and apply thickness colors.</div>
@@ -42,6 +43,7 @@
     const detectContactsBtn = document.getElementById('detectContactsBtn');
     const drillHolesBtn = document.getElementById('drillHolesBtn');
     const halfSlotBtn = document.getElementById('halfSlotBtn');
+    const fullSlotBtn = document.getElementById('fullSlotBtn');
     const restoreBtn = document.getElementById('restoreBtn');
 
     function send(action) {
@@ -60,6 +62,7 @@
     detectContactsBtn.addEventListener('click', () => send('detectContacts'));
     drillHolesBtn.addEventListener('click', () => send('drillScrewHoles'));
     halfSlotBtn.addEventListener('click', () => send('halfSlot'));
+    fullSlotBtn.addEventListener('click', () => send('fullSlot'));
     restoreBtn.addEventListener('click', () => send('restoreGenerated'));
 
     window.fusionJavaScriptHandler = {

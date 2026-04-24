@@ -91,6 +91,8 @@ class PaletteController:
             lines = self.restore_service.restore_screw_holes()
         elif action == "halfSlot" and self.half_slot_service:
             lines = self.half_slot_service.create()
+        elif action == "fullSlot" and self.half_slot_service:
+            lines = self.half_slot_service.create_full_slot()
         else:
             lines = [f"Coming soon: {action}"]
 

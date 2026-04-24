@@ -2,6 +2,7 @@ import adsk.core
 import adsk.fusion
 
 from core.models import BodyModel
+from config import ATTRIBUTE_GROUP
 
 
 class HalfSlotService:
@@ -15,15 +16,62 @@ class HalfSlotService:
         self.fusion = fusion_adapter
 
     def create(self):
+        return self._create_slot_variant(full_depth=False)
+
+    def create_full_slot(self):
+        return self._create_slot_variant(full_depth=True)
+
+    def _create_slot_variant(self, full_depth):
         selected = self.fusion.selected_bodies()
         if len(selected) < 2:
             return ["Select at least 2 bodies first."]
         selected_models = [BodyModel.from_brep_body(owner, body) for owner, body in selected]
+        selected_tokens = [model.token for model in selected_models]
+        variant_label = "Full Slot" if full_depth else "Half Slot"
+        pair_count = 0
+        detail_lines = []
 
-        pair = self._detect_pair_faces(selected_models[0], selected_models[1])
-        if not pair:
-            return ["No valid horizontal/vertical contact pair found."]
+        for i in range(len(selected_models)):
+            for j in range(i + 1, len(selected_models)):
+                current_models = self._current_models_by_tokens(selected_tokens)
+                if len(current_models) <= max(i, j):
+                    continue
+                pair = self._detect_pair_faces(current_models[i], current_models[j])
+                if not pair:
+                    continue
+                ok, lines = self._apply_slot_pair(pair, full_depth, variant_label)
+                if ok:
+                    pair_count += 1
+                    detail_lines.extend(lines)
+                else:
+                    detail_lines.extend(lines)
 
+        app, _ = self.fusion.get_app_ui()
+        if app and app.activeViewport:
+            app.activeViewport.refresh()
+
+        if pair_count == 0:
+            return ["No valid horizontal/vertical contact pair found."] + detail_lines
+
+        return [
+            f"{variant_label} completed.",
+            f"Pairs processed: {pair_count}",
+            "",
+        ] + detail_lines
+
+    def _current_models_by_tokens(self, ordered_tokens):
+        design = self.fusion.get_active_design()
+        if not design:
+            return []
+        current_pairs = self.fusion.all_project_bodies(design)
+        by_token = {}
+        for owner, body in current_pairs:
+            token = getattr(body, "entityToken", None)
+            if token:
+                by_token[token] = BodyModel.from_brep_body(owner, body)
+        return [by_token[token] for token in ordered_tokens if token in by_token]
+
+    def _apply_slot_pair(self, pair, full_depth, variant_label):
         horizontal_model, horizontal_face, vertical_model, vertical_face, contact = pair
         horizontal = horizontal_model.source_body
         vertical = vertical_model.source_body
@@ -31,20 +79,26 @@ class HalfSlotService:
         slot_length_mm = 160.0
         short_edge_mm = min(contact["ov1"], contact["ov2"])
         slot_width_mm = short_edge_mm + 1.0
+        axis = contact["axis"]
+        plane_coord = contact["plane_coord"]
 
-        # Slot only: sketch on horizontal contact face, then cut in.
+        horizontal_face = self._nearest_planar_face(horizontal, axis, plane_coord)
+        vertical_face = self._nearest_planar_face(vertical, axis, plane_coord)
+        if not horizontal_face or not vertical_face:
+            return False, [f"{horizontal.name} <-> {vertical.name} | face refresh failed"]
+
         slot_sketch = self._draw_rect_sketch(
             body=horizontal,
             face=horizontal_face,
             center_mm=center,
             length_mm=slot_length_mm,
             width_mm=slot_width_mm,
-            sketch_name="TroyPlugin_SlotSketch_{}".format(horizontal.name),
+            sketch_name="TroyPlugin_SlotSketch_{}_{}".format("Full" if full_depth else "Half", horizontal.name),
         )
         if slot_sketch is None:
-            return ["Failed to create slot sketch."]
+            return False, [f"{horizontal.name} <-> {vertical.name} | slot sketch failed"]
 
-        extrude_mm = horizontal_model.thickness_mm * 0.5
+        extrude_mm = horizontal_model.thickness_mm if full_depth else (horizontal_model.thickness_mm * 0.5)
         if extrude_mm < 0.1:
             extrude_mm = 0.1
 
@@ -54,19 +108,25 @@ class HalfSlotService:
             sketch=slot_sketch,
             distance_mm=extrude_mm,
             expected_area_mm2=(slot_length_mm * slot_width_mm),
-            feature_name="TroyPlugin_SlotCut",
+            feature_name="TroyPlugin_SlotCut_{}".format("Full" if full_depth else "Half"),
             operation=adsk.fusion.FeatureOperations.CutFeatureOperation,
             participant_body=horizontal,
+            outward_only=True,
+            debug_label="slot",
+            forced_sign=self._slot_cut_sign(horizontal_face, horizontal),
         )
         if not slot_ok:
-            return ["Slot sketch created, but slot cut failed."]
+            return False, [f"{horizontal.name} <-> {vertical.name} | slot cut failed"] + self._consume_debug_log()
 
-        # Tongue: sketch on vertical contact face, then extrude out.
         tongue_length_mm = 150.0
         tongue_width_mm = short_edge_mm
-        tongue_height_mm = (horizontal_model.thickness_mm * 0.5) - 0.5
+        tongue_height_mm = horizontal_model.thickness_mm if full_depth else ((horizontal_model.thickness_mm * 0.5) - 0.5)
         if tongue_height_mm < 0.1:
             tongue_height_mm = 0.1
+
+        vertical_face = self._nearest_planar_face(vertical, axis, plane_coord)
+        if not vertical_face:
+            return False, [f"{horizontal.name} <-> {vertical.name} | tongue face refresh failed"]
 
         tongue_sketch = self._draw_rect_sketch(
             body=vertical,
@@ -74,45 +134,119 @@ class HalfSlotService:
             center_mm=center,
             length_mm=tongue_length_mm,
             width_mm=tongue_width_mm,
-            sketch_name="TroyPlugin_TongueSketch_{}".format(vertical.name),
+            sketch_name="TroyPlugin_TongueSketch_{}_{}".format("Full" if full_depth else "Half", vertical.name),
         )
         if tongue_sketch is None:
-            return ["Slot created, but tongue sketch failed."]
+            return False, [f"{horizontal.name} <-> {vertical.name} | tongue sketch failed"]
 
-        tongue_ok = self._extrude_on_face(
+        tongue_ok = self._create_joined_tongue(
             body=vertical,
             face=vertical_face,
             sketch=tongue_sketch,
             distance_mm=tongue_height_mm,
             expected_area_mm2=(tongue_length_mm * tongue_width_mm),
-            feature_name="TroyPlugin_Tongue",
-            operation=adsk.fusion.FeatureOperations.JoinFeatureOperation,
-            participant_body=vertical,
-            outward_only=True,
-            fallback_new_body=True,
-            debug_label="tongue",
-            away_from_body=horizontal,
+            feature_name="TroyPlugin_Tongue_{}".format("Full" if full_depth else "Half"),
+            forced_sign=self._tongue_sign(vertical_face, horizontal, axis, plane_coord),
         )
         if not tongue_ok:
-            return ["Slot created, but tongue extrude failed."] + self._consume_debug_log()
+            return False, [f"{horizontal.name} <-> {vertical.name} | tongue extrude failed"] + self._consume_debug_log()
 
-        app, _ = self.fusion.get_app_ui()
-        if app and app.activeViewport:
-            app.activeViewport.refresh()
+        self._write_joinery_metadata(
+            horizontal=horizontal,
+            vertical=vertical,
+            variant="full" if full_depth else "half",
+            axis=contact["axis"],
+            center_mm=center,
+            tongue_length_mm=tongue_length_mm,
+            tongue_width_mm=tongue_width_mm,
+            tongue_height_mm=tongue_height_mm,
+        )
 
-        return [
-            "Half Slot completed.",
-            "Action: slot(cut) on horizontal + tongue(join) on vertical.",
-            f"Horizontal body: {horizontal.name}",
-            f"Vertical body: {vertical_model.name}",
+        return True, [
+            "{} | {} -> {}".format(variant_label, horizontal.name, vertical.name),
             f"Slot size: {slot_width_mm:.2f} x {slot_length_mm:.2f} mm",
             f"Tongue size: {tongue_width_mm:.2f} x {tongue_length_mm:.2f} mm",
             f"Contact center: ({center[0]:.2f}, {center[1]:.2f}, {center[2]:.2f}) mm",
             f"Slot depth: {extrude_mm:.2f} mm",
             f"Tongue height: {tongue_height_mm:.2f} mm",
-            f"Slot sketch owner: {horizontal.name}",
-            f"Tongue sketch owner: {vertical.name}",
+            "",
         ] + self._consume_debug_log()
+
+    def _create_joined_tongue(self, body, face, sketch, distance_mm, expected_area_mm2, feature_name, forced_sign):
+        if not hasattr(self, "_debug_lines"):
+            self._debug_lines = []
+        native_body = getattr(body, "nativeObject", None) or body
+        native_face = getattr(face, "nativeObject", None) or face
+        comp = native_body.parentComponent
+        if not comp:
+            self._debug_lines.append("debug[tongue] comp:none")
+            return False
+
+        try:
+            prof_count = sketch.profiles.count if sketch and sketch.profiles else 0
+        except:
+            prof_count = 0
+        self._debug_lines.append(f"debug[tongue] profiles:{prof_count}")
+        profile = self._best_profile(sketch, expected_area_mm2=expected_area_mm2)
+        if not profile:
+            self._debug_lines.append("debug[tongue] profile:none")
+            return False
+        try:
+            area_cm2 = profile.areaProperties(adsk.fusion.CalculationAccuracy.LowCalculationAccuracy).area
+            self._debug_lines.append(f"debug[tongue] profile_area_mm2:{area_cm2 * 100.0:.2f}")
+        except:
+            self._debug_lines.append("debug[tongue] profile_area_mm2:unknown")
+
+        sign = 1.0 if forced_sign >= 0 else -1.0
+        distance_cm = (abs(distance_mm) / 10.0) * sign
+        self._debug_lines.append(f"debug[tongue] dir_ref:forced_sign sign:{sign:+.0f}")
+        self._debug_lines.append(f"debug[tongue] dist_mm:{abs(distance_mm):.3f} dist_cm:{distance_cm:.4f}")
+
+        extrudes = comp.features.extrudeFeatures
+        combines = comp.features.combineFeatures
+        tool_feat = None
+        try:
+            tool_inp = extrudes.createInput(profile, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+            tool_inp.setDistanceExtent(False, adsk.core.ValueInput.createByReal(distance_cm))
+            tool_feat = extrudes.add(tool_inp)
+            tool_feat.name = feature_name + "_Tool"
+            self._debug_lines.append(f"debug[tongue] success tool:{tool_feat.name}")
+        except Exception as ex:
+            self._debug_lines.append(f"debug[tongue] fail tool err:{ex}")
+            return False
+
+        try:
+            if not tool_feat.bodies or tool_feat.bodies.count == 0:
+                self._debug_lines.append("debug[tongue] tool_body:none")
+                return False
+            tools = adsk.core.ObjectCollection.create()
+            tools.add(tool_feat.bodies.item(0))
+            combine_inp = combines.createInput(native_body, tools)
+            combine_inp.operation = adsk.fusion.FeatureOperations.JoinFeatureOperation
+            combine_inp.isKeepToolBodies = False
+            feat = combines.add(combine_inp)
+            feat.name = feature_name
+            self._debug_lines.append(f"debug[tongue] success combine:{feat.name}")
+            return True
+        except Exception as ex:
+            self._debug_lines.append(f"debug[tongue] fail combine err:{ex}")
+            return False
+
+    def _write_joinery_metadata(
+        self, horizontal, vertical, variant, axis, center_mm, tongue_length_mm, tongue_width_mm, tongue_height_mm
+    ):
+        for body, role, mate in ((horizontal, "horizontal", vertical), (vertical, "vertical", horizontal)):
+            attrs = body.attributes
+            attrs.add(ATTRIBUTE_GROUP, "joinery_variant", variant)
+            attrs.add(ATTRIBUTE_GROUP, "joinery_role", role)
+            attrs.add(ATTRIBUTE_GROUP, "joinery_axis", str(axis))
+            attrs.add(ATTRIBUTE_GROUP, "joinery_center_x_mm", "{:.3f}".format(center_mm[0]))
+            attrs.add(ATTRIBUTE_GROUP, "joinery_center_y_mm", "{:.3f}".format(center_mm[1]))
+            attrs.add(ATTRIBUTE_GROUP, "joinery_center_z_mm", "{:.3f}".format(center_mm[2]))
+            attrs.add(ATTRIBUTE_GROUP, "joinery_tongue_length_mm", "{:.3f}".format(tongue_length_mm))
+            attrs.add(ATTRIBUTE_GROUP, "joinery_tongue_width_mm", "{:.3f}".format(tongue_width_mm))
+            attrs.add(ATTRIBUTE_GROUP, "joinery_tongue_height_mm", "{:.3f}".format(tongue_height_mm))
+            attrs.add(ATTRIBUTE_GROUP, "joinery_mate_token", mate.entityToken)
 
     def _detect_pair_faces(self, model_a, model_b):
         body_a = model_a.source_body
@@ -208,7 +342,7 @@ class HalfSlotService:
             return False
 
         # Build in-plane axes from face normal.
-        normal = plane.normal
+        normal = self._face_normal(native_face)
         z_axis = adsk.core.Vector3D.create(0, 0, 1)
         x_axis = z_axis.crossProduct(normal)
         if x_axis.length < 1e-6:
@@ -247,6 +381,50 @@ class HalfSlotService:
         lines.addByTwoPoints(p3, p4)
         lines.addByTwoPoints(p4, p1)
         return sketch
+
+    def _face_normal(self, face):
+        try:
+            point = face.pointOnFace
+            ok, normal = face.evaluator.getNormalAtPoint(point)
+            if ok and normal and normal.length > 1e-6:
+                normal.normalize()
+                return normal
+        except:
+            pass
+        plane = adsk.core.Plane.cast(face.geometry)
+        if plane and plane.normal and plane.normal.length > 1e-6:
+            normal = plane.normal.copy()
+            normal.normalize()
+            return normal
+        return adsk.core.Vector3D.create(0, 0, 1)
+
+    def _tongue_sign(self, vertical_face, horizontal_body, axis, plane_coord_mm):
+        face_normal = self._face_normal(vertical_face)
+        normal_axis_sign = 1.0 if [face_normal.x, face_normal.y, face_normal.z][axis] >= 0 else -1.0
+        h_bbox = horizontal_body.boundingBox
+        h_center_axis_mm = [
+            (h_bbox.minPoint.x + h_bbox.maxPoint.x) * 5.0,
+            (h_bbox.minPoint.y + h_bbox.maxPoint.y) * 5.0,
+            (h_bbox.minPoint.z + h_bbox.maxPoint.z) * 5.0,
+        ][axis]
+        desired_axis_sign = 1.0 if h_center_axis_mm >= plane_coord_mm else -1.0
+        return 1.0 if normal_axis_sign == desired_axis_sign else -1.0
+
+    def _slot_cut_sign(self, horizontal_face, horizontal_body):
+        face_normal = self._face_normal(horizontal_face)
+        bbox = horizontal_body.boundingBox
+        center = adsk.core.Point3D.create(
+            (bbox.minPoint.x + bbox.maxPoint.x) * 0.5,
+            (bbox.minPoint.y + bbox.maxPoint.y) * 0.5,
+            (bbox.minPoint.z + bbox.maxPoint.z) * 0.5,
+        )
+        plane = adsk.core.Plane.cast(horizontal_face.geometry)
+        if not plane:
+            return 1.0
+        to_center = adsk.core.Vector3D.create(
+            center.x - plane.origin.x, center.y - plane.origin.y, center.z - plane.origin.z
+        )
+        return 1.0 if to_center.dotProduct(face_normal) >= 0 else -1.0
 
     def _best_profile(self, sketch, expected_area_mm2=None):
         if not sketch or not sketch.profiles or sketch.profiles.count == 0:
@@ -293,6 +471,8 @@ class HalfSlotService:
         fallback_new_body=False,
         debug_label="extrude",
         away_from_body=None,
+        toward_body=None,
+        forced_sign=None,
     ):
         if not hasattr(self, "_debug_lines"):
             self._debug_lines = []
@@ -324,8 +504,27 @@ class HalfSlotService:
         if not plane:
             self._debug_lines.append(f"debug[{debug_label}] face_plane:none")
             return False
+        face_normal = self._face_normal(native_face)
 
-        if away_from_body is not None:
+        if forced_sign is not None:
+            outward_sign = 1.0 if forced_sign >= 0 else -1.0
+            self._debug_lines.append(f"debug[{debug_label}] dir_ref:forced_sign sign:{outward_sign:+.0f}")
+        elif toward_body is not None:
+            ref_body = getattr(toward_body, "nativeObject", None) or toward_body
+            ref_bbox = ref_body.boundingBox
+            ref_center = adsk.core.Point3D.create(
+                (ref_bbox.minPoint.x + ref_bbox.maxPoint.x) * 0.5,
+                (ref_bbox.minPoint.y + ref_bbox.maxPoint.y) * 0.5,
+                (ref_bbox.minPoint.z + ref_bbox.maxPoint.z) * 0.5,
+            )
+            to_ref = adsk.core.Vector3D.create(
+                ref_center.x - plane.origin.x, ref_center.y - plane.origin.y, ref_center.z - plane.origin.z
+            )
+            dot = to_ref.dotProduct(face_normal)
+            # Move toward the reference body center.
+            outward_sign = 1.0 if dot > 0 else -1.0
+            self._debug_lines.append(f"debug[{debug_label}] dir_ref:toward_body dot:{dot:.6f}")
+        elif away_from_body is not None:
             ref_body = getattr(away_from_body, "nativeObject", None) or away_from_body
             ref_bbox = ref_body.boundingBox
             ref_center = adsk.core.Point3D.create(
@@ -336,7 +535,7 @@ class HalfSlotService:
             to_ref = adsk.core.Vector3D.create(
                 ref_center.x - plane.origin.x, ref_center.y - plane.origin.y, ref_center.z - plane.origin.z
             )
-            dot = to_ref.dotProduct(plane.normal)
+            dot = to_ref.dotProduct(face_normal)
             # Move away from reference body center.
             outward_sign = -1.0 if dot > 0 else 1.0
             self._debug_lines.append(f"debug[{debug_label}] outward_ref:other_body dot:{dot:.6f}")
@@ -350,7 +549,7 @@ class HalfSlotService:
             to_center = adsk.core.Vector3D.create(
                 center.x - plane.origin.x, center.y - plane.origin.y, center.z - plane.origin.z
             )
-            dot = to_center.dotProduct(plane.normal)
+            dot = to_center.dotProduct(face_normal)
             outward_sign = 1.0 if dot < 0 else -1.0
             self._debug_lines.append(f"debug[{debug_label}] outward_ref:self_body dot:{dot:.6f}")
 
