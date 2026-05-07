@@ -1,0 +1,12 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "addin",
+  "id": "com.troy.cabinetgenerator",
+  "author": "Troy",
+  "description": {
+    "": "Cabinet generator for Fusion 360"
+  },
+  "version": "0.0.1",
+  "runOnStartup": false,
+  "main": "CabinetGenerator.py"
+}

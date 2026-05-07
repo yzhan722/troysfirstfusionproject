@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Cabinet Generator</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 12px; color: #222; }
+    h2 { margin: 0 0 12px; font-size: 18px; }
+    label { display: block; margin-bottom: 4px; font-size: 12px; font-weight: bold; }
+    input, select { box-sizing: border-box; width: 100%; padding: 6px; }
+    button { padding: 7px 12px; }
+    .grid { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+    .row { margin-bottom: 10px; }
+    .hint { color: #666; font-size: 11px; line-height: 1.35; margin-top: 4px; }
+    #result {
+      white-space: pre-wrap;
+      border: 1px solid #ccc;
+      min-height: 180px;
+      padding: 8px;
+      background: #fafafa;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+  </style>
+</head>
+<body>
+  <h2>Cabinet Generator</h2>
+
+  <div class="grid">
+    <div class="row">
+      <label for="width">W 宽 (mm)</label>
+      <input id="width" type="number" min="1" step="1" value="2000" />
+    </div>
+    <div class="row">
+      <label for="depth">D 深 (mm)</label>
+      <input id="depth" type="number" min="1" step="1" value="400" />
+    </div>
+    <div class="row">
+      <label for="height">H 高 (mm)</label>
+      <input id="height" type="number" min="1" step="1" value="400" />
+    </div>
+    <div class="row">
+      <label for="bottomThickness">Bt 底板厚 (mm)</label>
+      <input id="bottomThickness" type="number" min="1" step="0.1" value="15" />
+    </div>
+    <div class="row">
+      <label for="routerDiameter">Crd 刀径 (mm)</label>
+      <input id="routerDiameter" type="number" min="0.1" step="0.1" value="10" />
+    </div>
+  </div>
+
+  <div class="row hint">
+    Auto: groove depth / Dntg_h = Bt / 2. Feature width / FGw = divider thickness 15 + clearance 1 = 16.
+  </div>
+
+  <div class="row">
+    <label for="internalXds">Internal divider centerlines only (mm)</label>
+    <input id="internalXds" type="text" value="600,1400" placeholder="600,1400" />
+    <div class="hint">
+      Edge divider notches are automatic: left = FGw / 2, right = Cw - FGw / 2.
+    </div>
+  </div>
+
+  <div class="row">
+    <label for="viewMode">Debug view</label>
+    <select id="viewMode">
+      <option value="bp" selected>BP only - easiest first check</option>
+      <option value="t2">T2 only</option>
+      <option value="t3">T3 only</option>
+      <option value="t4">T4 only</option>
+      <option value="divider">Divider side only</option>
+      <option value="all">All views</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <button id="generateBtn">Generate Debug Sketches</button>
+    <button id="generateBodiesBtn">Generate Bodies</button>
+    <button id="clearGeneratedBtn">Clear Generated</button>
+  </div>
+
+  <div id="result">Enter geometry parameters. Debug creates sketches; Generate Bodies creates cabinet solids; Clear Generated deletes generated sketches and bodies.</div>
+
+  <script>
+    const result = document.getElementById('result');
+    const fieldIds = [
+      'width',
+      'depth',
+      'height',
+      'bottomThickness',
+      'routerDiameter',
+      'internalXds',
+      'viewMode',
+    ];
+
+    function collectParams() {
+      const params = {};
+      fieldIds.forEach((id) => {
+        params[id] = document.getElementById(id).value;
+      });
+      return params;
+    }
+
+    function sendAction(action, busyText) {
+      const payload = {
+        action,
+        params: collectParams(),
+      };
+      if (window.adsk && window.adsk.fusionSendData) {
+        result.textContent = busyText;
+        window.adsk.fusionSendData('response', JSON.stringify(payload));
+      } else {
+        result.textContent = 'Fusion bridge not available.';
+      }
+    }
+
+    document.getElementById('generateBtn').addEventListener('click', () => {
+      sendAction('generateDebugSketches', 'Generating debug sketches...');
+    });
+    document.getElementById('generateBodiesBtn').addEventListener('click', () => {
+      sendAction('generateBodies', 'Generating bodies from closed vectors...');
+    });
+    document.getElementById('clearGeneratedBtn').addEventListener('click', () => {
+      sendAction('clearGenerated', 'Clearing generated sketches and bodies...');
+    });
+
+    window.fusionJavaScriptHandler = {
+      handle: function(action, data) {
+        if (action !== 'cabinetResult') return;
+        try {
+          const parsed = JSON.parse(data || '{}');
+          if (parsed && typeof parsed.text === 'string') {
+            result.textContent = parsed.text;
+          }
+        } catch (e) {
+          result.textContent = String(data || '');
+        }
+      }
+    };
+  </script>
+</body>
+</html>
