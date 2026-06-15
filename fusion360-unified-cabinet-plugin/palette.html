@@ -1270,13 +1270,13 @@
           <h3>Kitchen Cabinet Generator / Global Settings</h3>
           <div class="card-body">
             <div class="kitchen-global-grid">
-              <label>Length (X) <input id="kitchenLength" type="number" value="2131"></label>
-              <label>Depth (Y) <input id="kitchenDepth" type="number" value="600"></label>
-              <label>Height (Z) <input id="kitchenHeight" type="number" value="890"></label>
+              <label>Length (X) <input id="kitchenLength" type="number" value="887"></label>
+              <label>Total Depth (Y) <input id="kitchenDepth" type="number" value="270"></label>
+              <label>Height (Z) <input id="kitchenHeight" type="number" value="880"></label>
               <label>Material <input id="kitchenMaterialThickness" type="number" value="15"></label>
               <label>Front Thickness <input id="kitchenFrontThickness" type="number" value="16" step="0.1"></label>
               <label>Front Clearance <input id="kitchenFrontClearance" type="number" value="2.5" step="0.1"></label>
-              <label>Bottom H <input id="kitchenBottomClearanceHeight" type="number" value="70"></label>
+              <label>Bottom H <input id="kitchenBottomClearanceHeight" type="number" value="55"></label>
               <label>Bottom Style
                 <select id="kitchenBottomClearanceStyle">
                   <option value="style_1" selected>Style 1</option>
@@ -1591,35 +1591,38 @@
       dragFirstStart: 0,
       dragSecondStart: 0,
       globalSettings: {
-        length: 2131,
-        depth: 600,
-        height: 890,
+        length: 887,
+        depth: 270,
+        height: 880,
         materialThickness: 15,
         frontThickness: 16,
         frontClearance: 2.5,
         lockEnabled: true,
         lockPresetId: "razor_long_rounded_1",
-        bottomClearanceHeight: 70,
+        bottomClearanceHeight: 55,
         bottomClearanceStyle: "style_1",
       },
       columns: [
-        { id: "k-col-1", width: 700, columnType: "stove", zones: [
-          { id: "k-zone-1a", height: 450, zoneType: "stove" },
-          { id: "k-zone-1b", height: 220, zoneType: "drawer" },
-          { id: "k-zone-1c", height: 150, zoneType: "down_flap" },
+        { id: "k-col-1", width: 444, columnType: "left_door", zones: [
+          {
+            id: "k-zone-left-door",
+            height: 825,
+            zoneType: "left_door",
+            shelfEnabled: true,
+            shelfHeight: 400,
+            leftSidePanelOptions: {
+              panelType: "door",
+              frontVisible: true,
+              bchNotchEnabled: false,
+              grooveVisible: true,
+              extendT2T3B4ToOuterFace: true,
+              strengtheningStripEnabled: true,
+            },
+          },
         ] },
-        { id: "k-col-2", width: 340, columnType: "left_door", zones: [
-          { id: "k-zone-2a", height: 820, zoneType: "left_door", shelfHeight: 410 },
-        ] },
-        { id: "k-col-3", width: 660, columnType: "right_door", zones: [
-          { id: "k-zone-3a", height: 820, zoneType: "right_door", shelfHeight: 410 },
-        ] },
-        { id: "k-col-4", width: 431, columnType: "drawer", zones: [
-          { id: "k-zone-4a", height: 195, zoneType: "drawer" },
-          { id: "k-zone-4b", height: 210, zoneType: "drawer" },
-          { id: "k-zone-4c", height: 210, zoneType: "drawer" },
-          { id: "k-zone-4d", height: 105, zoneType: "drawer" },
-          { id: "k-zone-4e", height: 100, zoneType: "down_flap" },
+        { id: "k-col-2", width: 443, columnType: "custom", zones: [
+          { id: "k-zone-drawer", height: 300, zoneType: "drawer" },
+          { id: "k-zone-right-door", height: 525, zoneType: "right_door", shelfEnabled: false, shelfHeight: 303 },
         ] },
       ],
       wheelAvoidances: [],
@@ -1743,9 +1746,10 @@
       };
     }
 
-    function kitchenEnsureSidePanelOptions(zone, side) {
+    function kitchenEnsureSidePanelOptions(zone, side, create = true) {
       if (!zone) return null;
       const key = side === "left" ? "leftSidePanelOptions" : "rightSidePanelOptions";
+      if (!zone[key] && !create) return null;
       zone[key] = { ...kitchenDefaultSidePanelOptions(), ...(zone[key] || {}) };
       return zone[key];
     }
@@ -1756,6 +1760,15 @@
         left: columnIndex === 0,
         right: columnIndex === last,
       };
+    }
+
+    function kitchenSetColumnSidePanelOption(column, side, field, value) {
+      if (!column) return;
+      for (const zone of column.zones || []) {
+        const options = kitchenEnsureSidePanelOptions(zone, side);
+        if (!options) continue;
+        options[field] = value;
+      }
     }
 
     function kitchenEnsureZoneHardwareDefaults(zone) {
@@ -1835,6 +1848,10 @@
       kitchenState.globalSettings.bottomClearanceStyle = document.getElementById("kitchenBottomClearanceStyle").value;
       kitchenState.globalSettings.lockEnabled = document.getElementById("kitchenLockEnabled").value === "true";
       kitchenState.globalSettings.lockPresetId = document.getElementById("kitchenLockPreset").value;
+    }
+
+    function kitchenStructuralDepthUi() {
+      return Math.max(0, Number(kitchenState.globalSettings.depth || 0) - Number(kitchenState.globalSettings.frontThickness || 0));
     }
 
     function loungeReadState() {
@@ -5358,7 +5375,7 @@
           const hatch = zone.zoneType === "unassigned" ? "stroke-dasharray=\"6 4\"" : "";
           rects.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${kitchenFill(zone.zoneType)}" stroke="${zoneSelected ? "#0f6bff" : "#344b6a"}" stroke-width="${zoneSelected ? 3 : 1}" ${hatch} data-kitchen-zone="${column.id}:${zone.id}"></rect>`);
           rects.push(`<text x="${x + w / 2}" y="${y + h / 2}" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#22344d">${escapeHtml(kitchenTypeLabels[zone.zoneType] || zone.zoneType)}</text>`);
-          if ((zone.zoneType === "left_door" || zone.zoneType === "right_door") && Number(zone.shelfHeight) > 0 && Number(zone.shelfHeight) < Number(zone.height)) {
+          if ((zone.zoneType === "left_door" || zone.zoneType === "right_door") && zone.shelfEnabled !== false && Number(zone.shelfHeight) > 0 && Number(zone.shelfHeight) < Number(zone.height)) {
             const shelfZ = zRange.z0 + Number(zone.shelfHeight);
             const shelfY = yForZ(shelfZ);
             rects.push(`<line x1="${x + 8}" y1="${shelfY}" x2="${x + w - 8}" y2="${shelfY}" stroke="#4f5f75" stroke-width="1.5" stroke-dasharray="6 4" pointer-events="none"></line>`);
@@ -5451,15 +5468,23 @@
         const hinge = zone?.hingeSettings || kitchenDefaultHingeSettings(zone);
         const sideApplicability = kitchenOuterSideApplicability(columnIndex);
         const sideOptionsHtml = [
-          sideApplicability.left ? renderKitchenSidePanelOptionsGroup(zone, "left", isDoorZone) : "",
-          sideApplicability.right ? renderKitchenSidePanelOptionsGroup(zone, "right", isDoorZone) : "",
+          sideApplicability.left ? renderKitchenSidePanelOptionsGroup(zone, "left", isDoorZone, column) : "",
+          sideApplicability.right ? renderKitchenSidePanelOptionsGroup(zone, "right", isDoorZone, column) : "",
         ].join("");
         badge.textContent = `Selected: Column ${columnIndex + 1} / Zone ${zoneIndex + 1} - ${kitchenTypeLabels[zone?.zoneType] || ""}`;
         host.innerHTML = `
           <label>Parent Column Type <input class="oh-readonly" readonly value="${escapeHtml(kitchenTypeLabels[column?.columnType] || "")}"></label>
           <label>Zone Type <select id="kitchenPropZoneType">${["unassigned", ...kitchenTypeOptions].map((type) => `<option value="${type}" ${zone?.zoneType === type ? "selected" : ""}>${kitchenTypeLabels[type]}</option>`).join("")}</select></label>
           <label>Zone Height <input id="kitchenPropZoneHeight" type="number" value="${escapeHtml(zone?.height ?? 0)}"></label>
-          ${isDoorZone ? `<label>Shelf Top Height <input id="kitchenPropShelfHeight" type="number" min="0" value="${escapeHtml(zone?.shelfHeight ?? Math.round((Number(zone?.height) || 0) / 2))}"></label>` : ""}
+          ${isDoorZone ? `
+            <label>Shelf Enabled
+              <select id="kitchenPropShelfEnabled">
+                <option value="true" ${zone?.shelfEnabled !== false ? "selected" : ""}>Yes</option>
+                <option value="false" ${zone?.shelfEnabled === false ? "selected" : ""}>No</option>
+              </select>
+            </label>
+            ${zone?.shelfEnabled !== false ? `<label>Shelf Top Height <input id="kitchenPropShelfHeight" type="number" min="0" value="${escapeHtml(zone?.shelfHeight ?? Math.round((Number(zone?.height) || 0) / 2))}"></label>` : ""}
+          ` : ""}
           <div class="grid2"><label>X0 <input class="oh-readonly" readonly value="${escapeHtml(Math.round(xRange.x0))}"></label><label>X1 <input class="oh-readonly" readonly value="${escapeHtml(Math.round(xRange.x1))}"></label></div>
           <div class="grid2"><label>Z0 <input class="oh-readonly" readonly value="${escapeHtml(Math.round(zRange.z0))}"></label><label>Z1 <input class="oh-readonly" readonly value="${escapeHtml(Math.round(zRange.z1))}"></label></div>
           ${isFrontPanelZone ? `
@@ -5528,48 +5553,50 @@
       bindKitchenPropertyInputs();
     }
 
-    function renderKitchenSidePanelOptionsGroup(zone, side, isDoorZone) {
+    function renderKitchenSidePanelOptionsGroup(zone, side, isDoorZone, column) {
       const label = side === "left" ? "Left Side Panel Options" : "Right Side Panel Options";
-      const options = kitchenEnsureSidePanelOptions(zone, side) || kitchenDefaultSidePanelOptions();
+      const key = side === "left" ? "leftSidePanelOptions" : "rightSidePanelOptions";
+      const existing = (column?.zones || []).find((item) => item[key])?.[key];
+      const options = existing ? { ...kitchenDefaultSidePanelOptions(), ...existing } : kitchenDefaultSidePanelOptions();
       const frontDisabled = !options.frontVisible;
       const stripDisabled = frontDisabled || !isDoorZone;
-      const key = side === "left" ? "left" : "right";
+      const dataSide = side === "left" ? "left" : "right";
       return `
         <details open style="grid-column:1/-1;margin-top:8px;">
           <summary>${label}</summary>
           <div class="grid2" style="margin-top:8px;">
             <label>Panel Type
-              <select data-kitchen-side-option="${key}:panelType">
+              <select data-kitchen-side-option="${dataSide}:panelType">
                 <option value="carcass" ${options.panelType !== "door" ? "selected" : ""}>Carcass</option>
                 <option value="door" ${options.panelType === "door" ? "selected" : ""}>Door</option>
               </select>
             </label>
             <label>Side Front Visibility
-              <select data-kitchen-side-option="${key}:frontVisible">
+              <select data-kitchen-side-option="${dataSide}:frontVisible">
                 <option value="false" ${!options.frontVisible ? "selected" : ""}>No</option>
                 <option value="true" ${options.frontVisible ? "selected" : ""}>Yes</option>
               </select>
             </label>
             <label>Groove Visibility
-              <select data-kitchen-side-option="${key}:grooveVisible">
+              <select data-kitchen-side-option="${dataSide}:grooveVisible">
                 <option value="true" ${options.grooveVisible !== false ? "selected" : ""}>Visible</option>
                 <option value="false" ${options.grooveVisible === false ? "selected" : ""}>Hidden</option>
               </select>
             </label>
             <label>BCH Notch
-              <select data-kitchen-side-option="${key}:bchNotchEnabled" ${frontDisabled ? "disabled" : ""}>
+              <select data-kitchen-side-option="${dataSide}:bchNotchEnabled" ${frontDisabled ? "disabled" : ""}>
                 <option value="true" ${options.bchNotchEnabled !== false ? "selected" : ""}>Enabled</option>
                 <option value="false" ${options.bchNotchEnabled === false ? "selected" : ""}>Disabled</option>
               </select>
             </label>
             <label>T2 / T3 / B4 Extend
-              <select data-kitchen-side-option="${key}:extendT2T3B4ToOuterFace" ${frontDisabled ? "disabled" : ""}>
+              <select data-kitchen-side-option="${dataSide}:extendT2T3B4ToOuterFace" ${frontDisabled ? "disabled" : ""}>
                 <option value="true" ${options.extendT2T3B4ToOuterFace !== false ? "selected" : ""}>Enabled</option>
                 <option value="false" ${options.extendT2T3B4ToOuterFace === false ? "selected" : ""}>Disabled</option>
               </select>
             </label>
             <label>Side Strengthening Strip
-              <select data-kitchen-side-option="${key}:strengtheningStripEnabled" ${stripDisabled ? "disabled" : ""}>
+              <select data-kitchen-side-option="${dataSide}:strengtheningStripEnabled" ${stripDisabled ? "disabled" : ""}>
                 <option value="false" ${!options.strengtheningStripEnabled ? "selected" : ""}>Disabled</option>
                 <option value="true" ${options.strengtheningStripEnabled ? "selected" : ""}>Enabled</option>
               </select>
@@ -5822,6 +5849,7 @@
             id: zone.id,
             height: Number(zone.height) || 0,
             zoneType: zone.zoneType,
+            ...(zone.shelfEnabled != null ? { shelfEnabled: zone.shelfEnabled !== false } : {}),
             ...(zone.shelfHeight != null ? { shelfHeight: Number(zone.shelfHeight) || 0 } : {}),
             ...(zone.lockEnabled != null ? { lockEnabled: zone.lockEnabled !== false } : {}),
             ...(zone.lockSideCenterOffset != null ? { lockSideCenterOffset: Number(zone.lockSideCenterOffset) || 80 } : {}),
@@ -5990,7 +6018,7 @@
         x0: 25,
         x1: Math.min(125, kitchenState.globalSettings.length),
         height: 250,
-        depth: kitchenState.globalSettings.depth,
+        depth: kitchenStructuralDepthUi(),
       };
       kitchenState.wheelAvoidances.push(item);
       kitchenSelect({ type: "wheel_avoidance", avoidanceId: item.id });
@@ -6040,6 +6068,7 @@
             delete zone.lockEnabled;
             delete zone.hingeSettings;
           }
+          kitchenClearMachiningConflictState();
           refreshKitchenColumnTypeFromZones(column);
         }
         renderKitchenUi();
@@ -6061,6 +6090,7 @@
         if (zone.shelfHeight != null) {
           zone.shelfHeight = Math.max(0, Math.min(Number(zone.height) || 0, Number(zone.shelfHeight) || 0));
         }
+        kitchenClearMachiningConflictState();
         renderKitchenUi();
       });
       const shelfHeight = document.getElementById("kitchenPropShelfHeight");
@@ -6069,6 +6099,17 @@
         const zone = column?.zones[kitchenZoneIndex(column, kitchenState.selection.zoneId)];
         if (!zone) return;
         zone.shelfHeight = Math.max(0, Math.min(Number(zone.height) || 0, Number(shelfHeight.value || 0)));
+        kitchenClearMachiningConflictState();
+        renderKitchenUi();
+      });
+      const shelfEnabled = document.getElementById("kitchenPropShelfEnabled");
+      if (shelfEnabled) shelfEnabled.addEventListener("change", () => {
+        const column = kitchenState.columns[kitchenColumnIndex(kitchenState.selection.columnId)];
+        const zone = column?.zones[kitchenZoneIndex(column, kitchenState.selection.zoneId)];
+        if (!zone) return;
+        zone.shelfEnabled = shelfEnabled.value !== "false";
+        if (zone.shelfEnabled && zone.shelfHeight == null) zone.shelfHeight = Math.round((Number(zone.height) || 0) / 2);
+        kitchenClearMachiningConflictState();
         renderKitchenUi();
       });
       const lockEnabled = document.getElementById("kitchenPropLockEnabled");
@@ -6118,15 +6159,15 @@
         input.addEventListener("change", () => {
           const [side, field] = input.dataset.kitchenSideOption.split(":");
           const column = kitchenState.columns[kitchenColumnIndex(kitchenState.selection.columnId)];
-          const zone = column?.zones[kitchenZoneIndex(column, kitchenState.selection.zoneId)];
-          if (!zone) return;
-          const options = kitchenEnsureSidePanelOptions(zone, side);
-          if (!options) return;
+          if (!column) return;
+          let value;
           if (field === "panelType") {
-            options.panelType = input.value === "door" ? "door" : "carcass";
+            value = input.value === "door" ? "door" : "carcass";
           } else {
-            options[field] = input.value === "true";
+            value = input.value === "true";
           }
+          kitchenSetColumnSidePanelOption(column, side, field, value);
+          kitchenClearMachiningConflictState();
           renderKitchenUi();
         });
       });
@@ -6286,6 +6327,13 @@
       return Boolean(kitchenState.geometryResult && kitchenState.geometryStateJson === kitchenCurrentStateJson());
     }
 
+    function kitchenClearMachiningConflictState() {
+      kitchenState.vPanelMachiningPreferences = [];
+      kitchenState.lastConflictPromptKey = "";
+      kitchenState.geometryResult = null;
+      kitchenState.geometryStateJson = "";
+    }
+
     function kitchenGenerateThen(actionName) {
       kitchenState.pendingFusionAction = actionName;
       kitchenReadGlobalInputs();
@@ -6358,21 +6406,39 @@
       const key = `${vPanelIndex}:${errors.join("|")}`;
       if (kitchenState.lastConflictPromptKey === key) return;
       kitchenState.lastConflictPromptKey = key;
-      const answer = window.prompt(
-        `V${vPanelIndex} has double-sided half-slot conflict.\nChoose machining mode:\nleft = left face half slots allowed\nright = right face half slots allowed\nthrough = convert all to through slots`,
-        "through"
-      );
-      const normalized = String(answer || "").trim().toLowerCase();
-      const modeMap = {
-        left: "left_face_half_allowed",
-        right: "right_face_half_allowed",
-        through: "through_only",
-      };
-      const mode = modeMap[normalized];
-      if (!mode) return;
-      kitchenState.vPanelMachiningPreferences.push({ vPanelIndex, mode });
-      kitchenState.lastConflictPromptKey = "";
-      kitchenGeneratePreview();
+      const host = document.getElementById("kitchenWarningsPanel");
+      if (!host) return;
+      const selectorId = `kitchenMachiningModeSelect-${vPanelIndex}`;
+      host.innerHTML = `
+        <div class="message warn">
+          <strong>V${escapeHtml(vPanelIndex)} double-sided half-slot conflict.</strong>
+          <div style="margin-top:6px;">Choose which side stays half and which side becomes through:</div>
+          <select id="${selectorId}" style="margin-top:6px;width:100%;">
+            <option value="left_half">Left half / Right through</option>
+            <option value="right_half">Right half / Left through</option>
+            <option value="left_through">Left through / Right half</option>
+            <option value="right_through">Right through / Left half</option>
+          </select>
+          <div class="mini-actions" style="margin-top:8px;">
+            <button id="kitchenMachiningApply-${escapeHtml(vPanelIndex)}">Apply</button>
+            <button id="kitchenMachiningDismiss-${escapeHtml(vPanelIndex)}">Dismiss</button>
+          </div>
+        </div>`;
+      const apply = document.getElementById(`kitchenMachiningApply-${vPanelIndex}`);
+      const dismiss = document.getElementById(`kitchenMachiningDismiss-${vPanelIndex}`);
+      if (apply) apply.addEventListener("click", () => {
+        const select = document.getElementById(selectorId);
+        const mode = select?.value;
+        if (!mode) return;
+        kitchenState.vPanelMachiningPreferences = kitchenState.vPanelMachiningPreferences.filter((item) => item.vPanelIndex !== vPanelIndex);
+        kitchenState.vPanelMachiningPreferences.push({ vPanelIndex, mode });
+        kitchenState.lastConflictPromptKey = "";
+        kitchenGeneratePreview();
+      });
+      if (dismiss) dismiss.addEventListener("click", () => {
+        kitchenState.lastConflictPromptKey = "";
+        renderKitchenWarnings();
+      });
     }
 
     function generalTallGenerate() {

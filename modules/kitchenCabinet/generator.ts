@@ -64,14 +64,18 @@ function sidePanelThickness(options: SidePanelOptions, cpt: number, fpt: number)
   return options.panelType === "door" ? fpt : cpt;
 }
 
+function kitchenStructuralDepth(settings: KitchenLayoutState["globalSettings"]): number {
+  return Math.max(0, n(settings.depth, 0) - n(settings.frontThickness, 16));
+}
+
 function resolveOuterSideOptions(state: KitchenLayoutState, side: "left" | "right", warnings?: string[]): SidePanelOptions {
   const column = side === "left" ? state.columns[0] : state.columns[state.columns.length - 1];
   const key = side === "left" ? "leftSidePanelOptions" : "rightSidePanelOptions";
   const zonesWithOptions = (column?.zones || []).filter((zone) => Boolean(zone[key]));
-  if (zonesWithOptions.length > 1) {
-    warnings?.push(`${side} side panel has multiple zone option definitions; using ${zonesWithOptions[0].id}.`);
-  }
-  return normalizeSidePanelOptions(zonesWithOptions[0]?.[key]);
+  const preferredZone = zonesWithOptions.find((zone) => zone.zoneType === "left_door" || zone.zoneType === "right_door")
+    || zonesWithOptions.find((zone) => zoneVisible(zone.zoneType))
+    || zonesWithOptions[0];
+  return normalizeSidePanelOptions(preferredZone?.[key]);
 }
 
 function sideReferences(state: KitchenLayoutState, warnings?: string[]) {
@@ -275,13 +279,12 @@ function applySideFrontVisibility(
 ): Array<[number, number]> {
   const frontVisible = Boolean(options?.frontVisible);
   if (!frontVisible || profile.length < 2) return profile;
-  const frontY = profile[0][0];
   const notchlessTop = profile.map(([y, z]) => [
-    z >= cabinetHeight - frontRepairMaxZ - 0.001 && y >= -0.001 && y <= frontRepairMaxY + 0.001 ? 0 : y,
+    z >= cabinetHeight - frontRepairMaxZ - 0.001 && y >= -0.001 && y <= frontRepairMaxY + 0.001 ? -fpt : y,
     z >= cabinetHeight - frontRepairMaxZ - 0.001 && y >= -0.001 && y <= frontRepairMaxY + 0.001 ? cabinetHeight : z,
   ]);
   const extended = notchlessTop.map(([y, z]) => [
-    (Math.abs(y) <= 0.001 && z < cabinetHeight - 0.001) || Math.abs(y - frontY) <= 0.001 ? -fpt : y,
+    Math.abs(y) <= 0.001 && z >= frontRepairMaxZ - 0.001 && z < cabinetHeight - 0.001 ? -fpt : y,
     z,
   ]);
   if (options?.bchNotchEnabled !== false) return trimClosedProfile(extended);
@@ -302,7 +305,7 @@ function computeXBoundaries(columns: KitchenLayoutState["columns"]): number[] {
 function computeVPanels(state: KitchenLayoutState, constants: KitchenGeometryConstants, warnings: string[]): VPanelGeometry[] {
   const g = state.globalSettings;
   const cw = n(g.length, 0);
-  const cd = n(g.depth, 0);
+  const cd = kitchenStructuralDepth(g);
   const ch = n(g.height, 0);
   const cpt = n(g.materialThickness, 15);
   const fpt = n(g.frontThickness, 16);
@@ -391,7 +394,7 @@ function removeFrontTopReceiverNotch(profile: Array<[number, number]>, cd: numbe
 
 function removeUnsupportedEdgeStoveVPanelNotches(vPanels: VPanelGeometry[], zones: ComputedKitchenZone[], state: KitchenLayoutState, constants: KitchenGeometryConstants): void {
   const g = state.globalSettings;
-  const cd = n(g.depth, 0);
+  const cd = kitchenStructuralDepth(g);
   const ch = n(g.height, 0);
   const cpt = n(g.materialThickness, 15);
   const lastColumnIndex = state.columns.length - 1;
@@ -406,16 +409,17 @@ function removeUnsupportedEdgeStoveVPanelNotches(vPanels: VPanelGeometry[], zone
 }
 
 function supportStripNotches(idPrefix: string, strip: Pick<BoardGeometry, "x0" | "x1" | "y0" | "y1" | "z0" | "z1">, vPanels: VPanelGeometry[], cpt: number, c: KitchenGeometryConstants, kind: "T1" | "T2" | "T3" | "B4"): BoardNotch[] {
+  const notchDepth = c.supportStripNotchDepth;
   return vPanels
     .filter((v) => v.centerX >= strip.x0 - 0.5 && v.centerX <= strip.x1 + 0.5)
     .map((v) => {
       const x0 = Math.max(strip.x0, v.centerX - cpt / 2 - 0.5);
       const x1 = Math.min(strip.x1, v.centerX + cpt / 2 + 0.5);
       const base = { id: `${idPrefix}-notch-V${v.index}`, x0, x1 };
-      if (kind === "T1") return { ...base, y0: strip.y1 - c.supportStripNotchDepth, y1: strip.y1, from: "rear" as const };
-      if (kind === "T2") return { ...base, y0: strip.y0, y1: strip.y0 + c.supportStripNotchDepth, from: "front" as const };
-      if (kind === "T3") return { ...base, z0: strip.z0, z1: strip.z0 + c.supportStripNotchDepth, from: "bottom" as const };
-      return { ...base, z0: strip.z1 - c.supportStripNotchDepth, z1: strip.z1, from: "top" as const };
+      if (kind === "T1") return { ...base, y0: strip.y1 - notchDepth, y1: strip.y1, from: "rear" as const };
+      if (kind === "T2") return { ...base, y0: strip.y0, y1: strip.y0 + notchDepth, from: "front" as const };
+      if (kind === "T3") return { ...base, z0: strip.z0, z1: strip.z0 + notchDepth, from: "bottom" as const };
+      return { ...base, z0: strip.z1 - notchDepth, z1: strip.z1, from: "top" as const };
     });
 }
 
@@ -442,7 +446,7 @@ function splitStripForStove<T extends Pick<BoardGeometry, "x0" | "x1" | "y0" | "
 function generateBaseBoards(state: KitchenLayoutState, vPanels: VPanelGeometry[], columns: ComputedKitchenColumn[], zones: ComputedKitchenZone[], constants: KitchenGeometryConstants, warnings: string[]): BoardGeometry[] {
   const g = state.globalSettings;
   const cw = n(g.length, 0);
-  const cd = n(g.depth, 0);
+  const cd = kitchenStructuralDepth(g);
   const ch = n(g.height, 0);
   const cpt = n(g.materialThickness, 15);
   const fpt = n(g.frontThickness, 16);
@@ -462,6 +466,8 @@ function generateBaseBoards(state: KitchenLayoutState, vPanels: VPanelGeometry[]
     boards.push(board("B2", "Bottom carcass panel", "B2", "bottom_system", cpt, "XZ", "Y", { x0: frontStopX0, x1: frontStopX1, y0: constants.style1ToeKickY - cpt, y1: constants.style1ToeKickY, z0: 0, z1: bch }));
   }
 
+  const b3Y0 = 0;
+  const b3Y1 = constants.supportStripWidth;
   boards.push(board(
     "B3",
     "Bottom horizontal board",
@@ -470,13 +476,13 @@ function generateBaseBoards(state: KitchenLayoutState, vPanels: VPanelGeometry[]
     cpt,
     "XY",
     "Z",
-    { x0: frontStopX0, x1: frontStopX1, y0: Math.max(0, constants.b3Depth - constants.supportStripWidth), y1: constants.b3Depth, z0: bch, z1: bch + cpt },
+    { x0: frontStopX0, x1: frontStopX1, y0: b3Y0, y1: b3Y1, z0: bch, z1: bch + cpt },
     vPanels.map((v) => ({
       id: `B3-notch-V${v.index}`,
       x0: Math.max(frontStopX0, v.centerX - cpt / 2 - 0.5),
       x1: Math.min(frontStopX1, v.centerX + cpt / 2 + 0.5),
-      y0: constants.b3Depth - constants.b3InternalNotchDepth,
-      y1: constants.b3Depth,
+      y0: Math.max(b3Y0, b3Y1 - constants.supportStripNotchDepth),
+      y1: b3Y1,
       from: "rear",
     })),
   ));
@@ -569,14 +575,14 @@ function addFunctionalBoard(boards: BoardGeometry[], id: string, type: "drawer_d
 
 function generateFunctionalBoards(columns: ComputedKitchenColumn[], zones: ComputedKitchenZone[], state: KitchenLayoutState, constants: KitchenGeometryConstants, warnings: string[]): BoardGeometry[] {
   const cpt = n(state.globalSettings.materialThickness, 15);
-  const cd = n(state.globalSettings.depth, 0);
+  const cd = kitchenStructuralDepth(state.globalSettings);
   const boards: BoardGeometry[] = [];
   for (const column of columns) {
     const columnZones = zones.filter((zone) => zone.columnId === column.id);
     columnZones.forEach((zone, index) => {
       const type = boundaryBoardType(zone.zoneType, index === columnZones.length - 1);
       if (type) addFunctionalBoard(boards, `${column.id}-${zone.id}-bottom`, type, column, zone.z0, cpt, cd, constants);
-      if (zone.zoneType === "left_door" || zone.zoneType === "right_door") {
+      if ((zone.zoneType === "left_door" || zone.zoneType === "right_door") && zone.shelfEnabled !== false) {
         const shelfTopHeight = zone.shelfHeight == null ? Math.round(zone.height / 2) : n(zone.shelfHeight, 0);
         const shelfTopZ = zone.z0 + shelfTopHeight;
         if (zone.height < 350) {
@@ -603,7 +609,6 @@ function addSideStrengtheningStrips(boards: BoardGeometry[], columns: ComputedKi
     const options = side === "left" ? refs.left.options : refs.right.options;
     if (!options.frontVisible || !options.strengtheningStripEnabled) return;
     if (zone.zoneType !== "left_door" && zone.zoneType !== "right_door") {
-      warnings.push(`${side} side strengthening strip skipped for ${zone.id}: selected zone is not Door.`);
       return;
     }
     const columnZones = zones.filter((item) => item.columnIndex === columnIndex);
@@ -631,8 +636,8 @@ function addSideStrengtheningStrips(boards: BoardGeometry[], columns: ComputedKi
       "side_strengthening_strip",
       "support_strip",
       cpt,
-      "XZ",
-      "Y",
+      "YZ",
+      "X",
       { x0, x1, y0: 0, y1: 100, z0: stripZ0, z1: stripZ1 },
       undefined,
       ["Side strengthening strip: no notch, groove, or tongue."],
@@ -641,6 +646,54 @@ function addSideStrengtheningStrips(boards: BoardGeometry[], columns: ComputedKi
   zones.filter((zone) => zone.columnIndex === 0).forEach((zone) => addStrip("left", 0, zone));
   const rightIndex = columns.length - 1;
   zones.filter((zone) => zone.columnIndex === rightIndex).forEach((zone) => addStrip("right", rightIndex, zone));
+}
+
+function applySideStrengtheningStripShelfJoinery(boards: BoardGeometry[], cpt: number): void {
+  const notchY0 = 0;
+  const notchY1 = 85;
+  const stripSlotY0 = 80;
+  const stripSlotY1 = 100;
+  const clearance = 1;
+  const halfClearance = clearance / 2;
+  for (const strip of boards.filter((item) => item.type === "side_strengthening_strip")) {
+    const side = strip.id.startsWith("left-") ? "left" : strip.id.startsWith("right-") ? "right" : null;
+    if (!side) continue;
+    const zoneId = strip.id.replace(/^left-side-strengthening-strip-/, "").replace(/^right-side-strengthening-strip-/, "");
+    const shelf = boards.find((item) => item.id === `${zoneId}-door-shelf`);
+    if (!shelf) continue;
+    const shelfBodyX0 = shelf.profileXY?.[0]?.[0] ?? shelf.x0;
+    const shelfBodyX1 = shelf.profileXY?.[1]?.[0] ?? shelf.x1;
+    const notchWidth = cpt + clearance;
+    const shelfNotch: BoardNotch = side === "left"
+      ? {
+          id: `${shelf.id}-${strip.id}-clearance`,
+          x0: shelfBodyX0,
+          x1: shelfBodyX0 + cpt + clearance,
+          y0: notchY0,
+          y1: notchY1,
+          from: "front",
+        }
+      : {
+          id: `${shelf.id}-${strip.id}-clearance`,
+          x0: shelfBodyX1 - cpt - clearance,
+          x1: shelfBodyX1,
+          y0: notchY0,
+          y1: notchY1,
+          from: "front",
+        };
+    shelf.notches = [...(shelf.notches || []), shelfNotch];
+    strip.profileXY = trimClosedProfile([
+      [strip.y0, strip.z0],
+      [strip.y1, strip.z0],
+      [strip.y1, shelf.z0 - halfClearance],
+      [stripSlotY0, shelf.z0 - halfClearance],
+      [stripSlotY0, shelf.z1 + halfClearance],
+      [strip.y1, shelf.z1 + halfClearance],
+      [strip.y1, strip.z1],
+      [strip.y0, strip.z1],
+      [strip.y0, strip.z0],
+    ]);
+  }
 }
 
 function slotRequestForBoardEnd(boardItem: BoardGeometry, vPanel: VPanelGeometry, side: "left" | "right", oppositeVisible: boolean, cpt: number, constants: KitchenGeometryConstants): SlotRequest {
@@ -687,6 +740,12 @@ function generateSlotRequests(boards: BoardGeometry[], columns: ComputedKitchenC
 
 function resolveSlots(requests: SlotRequest[], preferences: KitchenLayoutState["vPanelMachiningPreferences"], warnings: string[], errors: string[]): ResolvedSlot[] {
   const resolved: ResolvedSlot[] = requests.map((request) => ({ ...request, resolvedSlotType: request.slotType }));
+  const shouldBecomeThrough = (mode: VPanelMachiningMode, side: SlotSide): boolean => {
+    if (mode === "through_only") return true;
+    if (mode === "left_half" || mode === "right_through" || mode === "left_face_half_allowed") return side === "right";
+    if (mode === "right_half" || mode === "left_through" || mode === "right_face_half_allowed") return side === "left";
+    return false;
+  };
   const mergedHalfRequestIds = new Set<string>();
   const halfGroups = new Map<string, ResolvedSlot[]>();
   for (const request of resolved.filter((item) => item.slotType === "half")) {
@@ -726,7 +785,7 @@ function resolveSlots(requests: SlotRequest[], preferences: KitchenLayoutState["
     if (!mode) continue;
     for (const request of panelRequests) {
       request.machiningMode = mode;
-      if (mode === "through_only" || (mode === "left_face_half_allowed" && request.side === "right") || (mode === "right_face_half_allowed" && request.side === "left")) {
+      if (shouldBecomeThrough(mode, request.side)) {
         request.resolvedSlotType = "through";
         if (request.visibleOppositeSide) warnings.push(`Through slot may appear on visible side: ${request.id}.`);
       }
@@ -738,8 +797,9 @@ function resolveSlots(requests: SlotRequest[], preferences: KitchenLayoutState["
 function updateFunctionalBoardProfilesFromSlots(boards: BoardGeometry[], resolvedSlots: ResolvedSlot[], cpt: number, cd: number, constants: KitchenGeometryConstants): void {
   const tongueForSlot = (slot: ResolvedSlot | undefined): number => {
     if (!slot) return 0;
+    if (slot.resolvedSlotType === "through") return cpt;
     if (typeof slot.tongueLength === "number" && Number.isFinite(slot.tongueLength)) return Math.max(0, slot.tongueLength);
-    return slot.slotType === "through" ? cpt : Math.max(0, cpt / 2 - 0.5);
+    return Math.max(0, cpt / 2 - 0.5);
   };
   for (const boardItem of boards.filter((item) => item.type === "drawer_divider" || item.type === "full_depth_shelf" || item.type === "door_shelf")) {
     const boardSlots = resolvedSlots.filter((slot) => slot.boardId === boardItem.id);
@@ -854,8 +914,9 @@ function buildBoardBodies(boards: BoardGeometry[], resolvedSlots: ResolvedSlot[]
     const notchCutouts = (boardItem.notches || [])
       .map((notch) => notchCutoutForBoard(boardItem, notch))
       .filter((cutout): cutout is PanelBodyCutout => Boolean(cutout));
+    const usesCustomOuter = Array.isArray(boardItem.profileXY) && boardItem.profileXY.length > 0;
     const edgeProfile = outerWithEdgeNotches(h0, h1, v0, v1, notchCutouts);
-    const outer = boardItem.profilePlane === "XY" && Array.isArray(boardItem.profileXY) && boardItem.profileXY.length
+    const outer = usesCustomOuter
       ? boardItem.profileXY
       : edgeProfile.outer;
     const slotCutouts = resolvedSlots
@@ -865,7 +926,7 @@ function buildBoardBodies(boards: BoardGeometry[], resolvedSlots: ResolvedSlot[]
     boardItem.body = {
       plane: boardItem.profilePlane,
       outer,
-      cutouts: [...edgeProfile.remainingCutouts, ...slotCutouts],
+      cutouts: [...(usesCustomOuter ? notchCutouts : edgeProfile.remainingCutouts), ...slotCutouts],
     };
   }
 }
@@ -900,6 +961,7 @@ function buildPanelBodies(boards: BoardGeometry[], vPanels: VPanelGeometry[], re
 function boardDxfEntry(boardItem: BoardGeometry): PanelDxfGeometry {
   const rawOuter = boardItem.body?.outer || [];
   const outer = trimClosedProfile(rawOuter);
+  const cutouts = boardItem.body?.cutouts || [];
   return {
     panelId: boardItem.id,
     panelKind: "board",
@@ -916,8 +978,9 @@ function boardDxfEntry(boardItem: BoardGeometry): PanelDxfGeometry {
       z1: boardItem.z1,
     },
     outer,
-    throughVectors: [],
-    halfGrooveVectors: [],
+    notchVectors: cutouts.filter((cutout) => cutout.kind === "notch"),
+    throughVectors: cutouts.filter((cutout) => cutout.kind === "slot" && cutout.slotType === "through"),
+    halfGrooveVectors: cutouts.filter((cutout) => cutout.kind === "slot" && cutout.slotType === "half"),
     audit: auditClosedProfile(rawOuter, outer),
   };
 }
@@ -942,6 +1005,7 @@ function vPanelDxfEntry(panel: VPanelGeometry, cpt: number): PanelDxfGeometry {
       z1: Math.max(...outer.map((point) => point[1])),
     },
     outer,
+    notchVectors: cutouts.filter((cutout) => cutout.kind === "notch"),
     throughVectors: cutouts.filter((cutout) => cutout.kind === "slot" && cutout.slotType === "through"),
     halfGrooveVectors: cutouts.filter((cutout) => cutout.kind === "slot" && cutout.slotType === "half"),
     audit: auditClosedProfile(rawOuter, outer),
@@ -1112,7 +1176,7 @@ export function generateKitchenCabinetGeometry(rawState: KitchenLayoutState): Ki
   const errors: string[] = [];
   const g = state.globalSettings || {};
   const cw = n(g.length, 0);
-  const cd = n(g.depth, 0);
+  const cd = kitchenStructuralDepth(g);
   const ch = n(g.height, 0);
   const cpt = n(g.materialThickness, 15);
   const bch = n(g.bottomClearanceHeight, 70);
@@ -1145,6 +1209,7 @@ export function generateKitchenCabinetGeometry(rawState: KitchenLayoutState): Ki
   const slotRequests = generateSlotRequests(boards, columns, zones, vPanels, state, constants);
   const resolvedSlots = resolveSlots(slotRequests, state.vPanelMachiningPreferences, warnings, errors);
   updateFunctionalBoardProfilesFromSlots(boards, resolvedSlots, cpt, cd, constants);
+  applySideStrengtheningStripShelfJoinery(boards, cpt);
   buildPanelBodies(boards, vPanels, resolvedSlots);
   const frontPanels = buildFrontPanels(columns, zones, state);
   const panelDxf = buildPanelDxf(boards, vPanels, cpt);

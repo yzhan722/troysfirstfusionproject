@@ -4,7 +4,7 @@ import time
 import adsk.core
 import adsk.fusion
 
-ADAPTER_REVISION = "frontPanelHingeCupInside_modelZOffset_v22"
+ADAPTER_REVISION = "frontPanelHingeCupInside_notchVectors_v23"
 ATTRIBUTE_GROUP = "CabinetNC"
 MODEL_Z_OFFSET_MM = 10000.0
 
@@ -186,7 +186,7 @@ def _panel_entries(result):
             bbox = panel.get("bbox") if isinstance(panel.get("bbox"), dict) else None
             body = {
                 "outer": panel.get("outer"),
-                "cutouts": list(panel.get("throughVectors") or []) + list(panel.get("halfGrooveVectors") or []),
+                "cutouts": list(panel.get("notchVectors") or []) + list(panel.get("throughVectors") or []) + list(panel.get("halfGrooveVectors") or []),
             }
             points = _close_points(panel.get("outer"))
             if len(points) < 4 or not bbox:
@@ -208,6 +208,7 @@ def _panel_entries(result):
                 },
                 "body": body,
                 "points": points,
+                "notchVectors": list(panel.get("notchVectors") or []),
                 "throughVectors": list(panel.get("throughVectors") or []),
                 "halfGrooveVectors": list(panel.get("halfGrooveVectors") or []),
             })
@@ -763,6 +764,60 @@ def _cut_panel_vectors_batch(component, body, entry, cutouts, slot_type, label, 
     ]
 
 
+def _cut_panel_notches_batch(component, body, entry, cutouts):
+    notches = [cutout for cutout in cutouts if cutout.get("kind") == "notch"]
+    if not notches:
+        return []
+    bbox = entry["bbox"]
+    thickness = max(0.1, _thickness_mm(bbox, entry["thicknessAxis"]))
+    flat_offset = entry.get("flatOffset") or {}
+    offset_x = _num(flat_offset.get("x"), 0.0)
+    offset_y = _num(flat_offset.get("y"), 0.0)
+    sketch = component.sketches.add(component.xYConstructionPlane)
+    sketch.name = "KITCHEN_{}_notches".format(sanitize_token(entry["id"], limit=45))
+    valid = []
+    for cutout in notches:
+        a0 = _num(cutout.get("x0"))
+        a1 = _num(cutout.get("x1"))
+        b0 = _num(cutout.get("y0"))
+        b1 = _num(cutout.get("y1"))
+        if None in (a0, a1, b0, b1):
+            valid.append((cutout, "invalid"))
+            continue
+        a0, a1 = min(a0, a1), max(a0, a1)
+        b0, b1 = min(b0, b1), max(b0, b1)
+        p0 = adsk.core.Point3D.create(mm_to_cm(a0 + offset_x), mm_to_cm(b0 + offset_y), 0)
+        p1 = adsk.core.Point3D.create(mm_to_cm(a1 + offset_x), mm_to_cm(b1 + offset_y), 0)
+        sketch.sketchCurves.sketchLines.addTwoPointRectangle(
+            sketch.modelToSketchSpace(p0),
+            sketch.modelToSketchSpace(p1),
+        )
+        valid.append((cutout, "drawn"))
+    profiles = _all_profiles(sketch)
+    if profiles is None:
+        return [{"id": cutout.get("id"), "status": "failed", "reason": "no closed notch profiles"} for cutout, _status in valid]
+    ext_input = component.features.extrudeFeatures.createInput(profiles, adsk.fusion.FeatureOperations.CutFeatureOperation)
+    ext_input.setDistanceExtent(False, adsk.core.ValueInput.createByReal(-mm_to_cm(thickness)))
+    try:
+        participants = adsk.core.ObjectCollection.create()
+        participants.add(body)
+        ext_input.participantBodies = participants
+    except Exception:
+        pass
+    component.features.extrudeFeatures.add(ext_input)
+    return [
+        {
+            "id": cutout.get("id"),
+            "sourceId": cutout.get("sourceId"),
+            "kind": "notch",
+            "status": "created" if status == "drawn" else "skipped",
+            "depth": thickness,
+            **({"reason": "invalid notch bounds"} if status != "drawn" else {}),
+        }
+        for cutout, status in valid
+    ]
+
+
 def _cut_panel_grooves_batch(component, body, entry, cutouts):
     audits = []
     for side in ("left", "right"):
@@ -918,6 +973,9 @@ def create_assembly_panel_bodies_from_kitchen_result(fusion, result, run_label=N
             created_ids.append(entry["id"])
             if create_cutouts:
                 try:
+                    for audit in _cut_panel_notches_batch(component, body, entry, entry.get("notchVectors") or []):
+                        audit["panelId"] = entry["id"]
+                        cutout_audit.append(audit)
                     for audit in _cut_panel_through_batch(component, body, entry, entry.get("throughVectors") or []):
                         audit["panelId"] = entry["id"]
                         cutout_audit.append(audit)

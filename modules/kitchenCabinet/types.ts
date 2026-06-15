@@ -24,6 +24,7 @@ export interface KitchenZone {
   id: string;
   height: number;
   zoneType: KitchenZoneType;
+  shelfEnabled?: boolean;
   shelfHeight?: number;
   leftSidePanelOptions?: SidePanelOptions;
   rightSidePanelOptions?: SidePanelOptions;
@@ -53,7 +54,14 @@ export interface WheelAvoidance {
   depth: number;
 }
 
-export type VPanelMachiningMode = "left_face_half_allowed" | "right_face_half_allowed" | "through_only";
+export type VPanelMachiningMode =
+  | "left_half"
+  | "right_half"
+  | "left_through"
+  | "right_through"
+  | "left_face_half_allowed"
+  | "right_face_half_allowed"
+  | "through_only";
 
 export interface VPanelMachiningPreference {
   vPanelIndex: number;
@@ -153,6 +161,7 @@ export interface PanelDxfGeometry {
     z1: number;
   };
   outer: Array<[number, number]>;
+  notchVectors?: PanelBodyCutout[];
   throughVectors: PanelBodyCutout[];
   halfGrooveVectors: PanelBodyCutout[];
   audit: PanelDxfAudit;
