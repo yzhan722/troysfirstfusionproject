@@ -634,15 +634,20 @@
       font-family: ui-monospace, monospace;
       color: #111827;
     }
-    .fusion-body-audit-table-wrap {
+    .fusion-body-audit-table-wrap,
+    .fusion-assembly-placement-table-wrap {
       overflow: auto;
       border: 1px solid var(--border);
       border-radius: 8px;
       max-height: min(82vh, 1400px);
       width: 100%;
     }
-    .fusion-body-audit-table-wrap table {
+    .fusion-body-audit-table-wrap table,
+    .fusion-assembly-placement-table-wrap table {
       min-width: max(100%, 960px);
+    }
+    .fusion-assembly-placement-table-wrap table {
+      min-width: max(100%, 1320px);
     }
     .v-preview-svg {
       display: block;
@@ -711,7 +716,9 @@
       vertical-align: top;
     }
     .fusion-body-audit-table th,
-    .fusion-body-audit-table td {
+    .fusion-body-audit-table td,
+    .fusion-assembly-placement-table th,
+    .fusion-assembly-placement-table td {
       word-break: break-word;
       vertical-align: top;
     }
@@ -724,6 +731,91 @@
     .diag-status-fail { color: #991b1b; font-weight: 700; }
     .diag-status-running { color: #1d4ed8; font-weight: 700; }
     .diag-status-skipped { color: #6b7280; font-weight: 600; }
+
+    /* Debug mode: development panels hidden unless body.debug-mode */
+    body:not(.debug-mode) .debug-only {
+      display: none !important;
+    }
+    body.debug-mode .fusion-compact-result {
+      display: none !important;
+    }
+    body:not(.debug-mode) .fusion-compact-result {
+      display: block;
+    }
+    .fusion-compact-result {
+      margin: 0 16px 14px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      border: 1px solid #bbf7d0;
+      background: var(--green-soft);
+    }
+    .fusion-compact-result.is-fail {
+      background: #fef2f2;
+      border-color: #fecaca;
+    }
+    .fusion-compact-result .fusion-compact-title {
+      font-weight: 800;
+      font-size: 15px;
+      margin-bottom: 10px;
+      color: #111827;
+    }
+    .fusion-compact-result .fusion-compact-dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 14px;
+      font-size: 13px;
+      margin: 0;
+    }
+    .fusion-compact-result .fusion-compact-dl dt {
+      margin: 0;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .fusion-compact-result .fusion-compact-dl dd {
+      margin: 0;
+      font-family: ui-monospace, monospace;
+      font-weight: 600;
+      color: #111827;
+    }
+    .fusion-compact-fail-block {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border);
+    }
+    .fusion-compact-fail-row {
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+    .fusion-compact-lbl {
+      font-weight: 800;
+      color: #374151;
+      margin-right: 8px;
+    }
+    .fusion-compact-val {
+      font-family: ui-monospace, monospace;
+      word-break: break-word;
+    }
+    .fusion-compact-first-err {
+      display: block;
+      margin-top: 4px;
+      white-space: pre-wrap;
+    }
+    .fusion-compact-tip {
+      margin: 10px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .header-actions .debug-mode-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 700;
+      font-size: 13px;
+      color: #374151;
+      user-select: none;
+      margin-right: 4px;
+    }
     @media (max-width: 860px) {
       .top-grid, .main-grid { grid-template-columns: 1fr; }
       .layout-body { grid-template-columns: 70px 1fr; }
@@ -732,6 +824,15 @@
   </style>
 </head>
 <body>
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem('fridgeCabinetGenerator.debugMode') === 'true') {
+          document.body.classList.add('debug-mode');
+        }
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
   <div class="app-shell">
     <header class="header">
       <div class="brand">
@@ -743,6 +844,10 @@
         </div>
       </div>
       <div class="header-actions">
+        <label class="debug-mode-toggle" for="debugModeCb">
+          <input id="debugModeCb" type="checkbox" />
+          Debug Mode
+        </label>
         <button class="ghost-btn" type="button">? Help</button>
         <button class="ghost-btn" type="button">Settings</button>
       </div>
@@ -754,6 +859,10 @@
         <div>
           <div class="card-title">Cabinet Dimensions (mm)</div>
           <div class="input-grid">
+            <div>
+              <label for="cabinetWidth">Cabinet Width</label>
+              <input id="cabinetWidth" type="number" value="611" min="1" step="1" />
+            </div>
             <div>
               <label for="cabinetDepth">Cabinet Depth</label>
               <input id="cabinetDepth" type="number" value="600" min="1" step="1" />
@@ -795,7 +904,7 @@
           <div class="input-grid">
             <div>
               <label for="fridgeWidth">Fridge Width</label>
-              <input id="fridgeWidth" type="number" value="560" min="1" step="1" />
+              <input id="fridgeWidth" type="number" value="550" min="1" step="1" />
             </div>
             <div>
               <label for="fridgeDepth">Fridge Depth</label>
@@ -803,7 +912,7 @@
             </div>
             <div>
               <label for="fridgeHeight">Fridge Height</label>
-              <input id="fridgeHeight" type="number" value="1490" min="1" step="1" />
+              <input id="fridgeHeight" type="number" value="1470" min="1" step="1" />
             </div>
           </div>
         </div>
@@ -814,43 +923,52 @@
         <div class="input-grid" style="grid-template-columns: 1fr 1fr;">
           <div>
             <label for="topClearance">Top Clearance</label>
-            <input id="topClearance" type="number" value="50" min="0" step="1" />
+            <input id="topClearance" type="number" value="55" min="0" step="1" />
           </div>
           <div>
             <label for="bottomClearance">Bottom Clearance</label>
-            <input id="bottomClearance" type="number" value="50" min="0" step="1" />
+            <input id="bottomClearance" type="number" value="68" min="0" step="1" />
           </div>
         </div>
         <label class="checkbox-row" for="wheelAvoidance">
-          <input id="wheelAvoidance" type="checkbox" />
+          <input id="wheelAvoidance" type="checkbox" checked />
           Wheel Avoidance
         </label>
-        <div id="wheelAvoidanceFields" class="conditional-grid">
+        <div id="wheelAvoidanceFields" class="conditional-grid is-visible">
           <div>
             <label for="wheelAvoidanceDepth">Avoidance Depth</label>
-            <input id="wheelAvoidanceDepth" type="number" value="80" min="0" step="1" />
+            <input id="wheelAvoidanceDepth" type="number" value="380" min="0" step="1" />
           </div>
           <div>
             <label for="wheelAvoidanceHeight">Avoidance Height</label>
-            <input id="wheelAvoidanceHeight" type="number" value="100" min="0" step="1" />
+            <input id="wheelAvoidanceHeight" type="number" value="220" min="0" step="1" />
           </div>
         </div>
       </div>
 
       <div class="card action-card">
         <button id="generateBtn" class="primary-btn" type="button">Generate</button>
-        <button id="sendTestGeneratePingBtn" class="secondary-btn" type="button">Send Test Generate Ping</button>
-        <button id="sendGenerateMiniBtn" class="secondary-btn" type="button">Send Generate Mini</button>
-        <button id="pingPythonRawBtn" class="secondary-btn" type="button">Ping Python Raw</button>
-        <label class="checkbox-row" for="generateDiagnosticsOnlyCb" style="margin-top: 10px;">
-          <input id="generateDiagnosticsOnlyCb" type="checkbox" checked />
-          Diagnostics only, do not create Fusion bodies
-        </label>
+        <div class="debug-only">
+          <button id="sendTestGeneratePingBtn" class="secondary-btn" type="button">Send Test Generate Ping</button>
+          <button id="sendGenerateMiniBtn" class="secondary-btn" type="button">Send Generate Mini</button>
+          <button id="pingPythonRawBtn" class="secondary-btn" type="button">Ping Python Raw</button>
+          <label class="checkbox-row" for="generateDiagnosticsOnlyCb" style="margin-top: 10px;">
+            <input id="generateDiagnosticsOnlyCb" type="checkbox" />
+            Diagnostics only, do not create Fusion bodies
+          </label>
+        </div>
+        <label for="generatePreviewModeSel" style="margin-top: 10px; display: block; font-size: 12px; color: #374151;">Fusion preview mode</label>
+        <select id="generatePreviewModeSel" style="margin-top: 4px; width: 100%; max-width: 320px; font: inherit;">
+          <option value="flat_xy">flat_xy — flat XY layout</option>
+          <option value="assembly_3d" selected>assembly_3d — cabinet-oriented v0.1 (default)</option>
+        </select>
         <button id="calculateBtn" class="secondary-btn" type="button">Calculate</button>
         <button id="validateBtn" class="secondary-btn" type="button">Validate</button>
-        <button id="showPureParamsBtn" class="secondary-btn" type="button">Show PureParams</button>
-        <button id="showBoardPlanBtn" class="secondary-btn" type="button">Show Board Plan</button>
-        <button id="checkVProfilesBtn" class="secondary-btn" type="button">Check V Profiles</button>
+        <div class="debug-only">
+          <button id="showPureParamsBtn" class="secondary-btn" type="button">Show PureParams</button>
+          <button id="showBoardPlanBtn" class="secondary-btn" type="button">Show Board Plan</button>
+          <button id="checkVProfilesBtn" class="secondary-btn" type="button">Check V Profiles</button>
+        </div>
       </div>
 
       <div id="fusionGenerateResultPanel" class="card fusion-result-panel">
@@ -858,6 +976,23 @@
           <div class="section-title">Fusion generate result</div>
           <span class="unit-badge">v0.1</span>
         </div>
+        <div id="fusionCompactResultWrap" class="fusion-compact-result">
+          <div class="fusion-compact-title">Fusion Generate Result</div>
+          <dl class="fusion-compact-dl">
+            <dt>Status</dt><dd id="fusionCompactStatus">—</dd>
+            <dt>Preview Mode</dt><dd id="fusionCompactPreviewMode">—</dd>
+            <dt>Bodies Created</dt><dd id="fusionCompactBodies">—</dd>
+            <dt>Skipped</dt><dd id="fusionCompactSkippedCount">—</dd>
+            <dt>Errors</dt><dd id="fusionCompactErrorsCount">—</dd>
+            <dt>Warnings</dt><dd id="fusionCompactWarningsCount">—</dd>
+          </dl>
+          <div id="fusionCompactFailBlock" class="fusion-compact-fail-block" style="display: none;">
+            <div class="fusion-compact-fail-row"><span class="fusion-compact-lbl">Failed Step</span> <span id="fusionCompactFailedStep" class="fusion-compact-val">—</span></div>
+            <div class="fusion-compact-fail-row"><span class="fusion-compact-lbl">First Error</span> <span id="fusionCompactFirstError" class="fusion-compact-val fusion-compact-first-err">—</span></div>
+            <p id="fusionCompactTip" class="fusion-compact-tip">Tip: Turn on Debug Mode for full diagnostics.</p>
+          </div>
+        </div>
+        <div class="debug-only fusion-generate-result-debug-detail">
         <div class="output-note" style="margin-top:14px;">Raw ping test (direct fusionSendData, not sendToFusion)</div>
         <div class="output-note" style="margin-top:4px;">Actual Raw Ping Sent</div>
         <dl class="fusion-result-grid">
@@ -910,12 +1045,20 @@
         <pre id="fusionResultActualPreview" class="json-block" style="max-height:140px;">—</pre>
         <div class="output-note" style="margin-top:10px;">Server result</div>
         <dl class="fusion-result-grid">
+          <dt>previewMode</dt>
+          <dd id="fusionResultPreviewMode">—</dd>
           <dt>pureParams.validation.ok</dt>
           <dd id="fusionResultPureOk">—</dd>
           <dt>boardPlan.validation.ok</dt>
           <dd id="fusionResultBoardOk">—</dd>
           <dt>vVerify.ok</dt>
           <dd id="fusionResultVVerifyOk">—</dd>
+          <dt>assemblyPlacement.ok</dt>
+          <dd id="fusionResultAssemblyOk">—</dd>
+          <dt>assemblyPlacement.placedCount</dt>
+          <dd id="fusionResultAssemblyPlacedCount">—</dd>
+          <dt>assemblyPlacement.skippedCount</dt>
+          <dd id="fusionResultAssemblySkippedCount">—</dd>
           <dt>createdBodies</dt>
           <dd id="fusionResultCreated">—</dd>
           <dt>boardPlanBoardCount</dt>
@@ -931,8 +1074,65 @@
           <dt>generateRunId</dt>
           <dd id="fusionResultRunId">—</dd>
         </dl>
+        <div class="output-note" style="margin-top:10px;">Assembly Placement Plan v0.1</div>
+        <dl class="fusion-result-grid">
+          <dt>assemblyPlacement.ok</dt>
+          <dd id="fusionAssemblyPlanOk">—</dd>
+          <dt>placedCount</dt>
+          <dd id="fusionAssemblyPlanPlacedCount">—</dd>
+          <dt>skippedCount</dt>
+          <dd id="fusionAssemblyPlanSkippedCount">—</dd>
+          <dt>placedBoardIds</dt>
+          <dd id="fusionAssemblyPlanPlacedIds" style="word-break: break-word;">—</dd>
+          <dt>skippedBoardIds</dt>
+          <dd id="fusionAssemblyPlanSkippedIds" style="word-break: break-word;">—</dd>
+        </dl>
+        <div class="output-note" style="margin-top:6px;">warnings</div>
+        <pre id="fusionAssemblyPlanWarningsPre" class="json-block" style="max-height:200px;">—</pre>
+        <div class="output-note" style="margin-top:8px;">Assembly placement summary（按板材）</div>
+        <div id="fusionAssemblyPlacementWrap" class="fusion-assembly-placement-table-wrap" style="display: none;">
+          <table class="diag-pipeline-table fusion-assembly-placement-table" style="min-width: 100%; font-size: 11px;">
+            <thead>
+              <tr>
+                <th>boardId</th>
+                <th>series</th>
+                <th>type</th>
+                <th>originMm.x</th>
+                <th>originMm.y</th>
+                <th>originMm.z</th>
+                <th>profilePlane</th>
+                <th>thicknessAxis</th>
+                <th>profileAxisU</th>
+                <th>profileAxisV</th>
+                <th>status / notes</th>
+              </tr>
+            </thead>
+            <tbody id="fusionAssemblyPlacementTbody"></tbody>
+          </table>
+        </div>
+        <div class="output-note" style="margin-top:8px;">Assembly Placement Plan（完整 JSON）</div>
+        <pre id="fusionAssemblyPlacementFullPre" class="json-block fusion-body-audit-json">—</pre>
         <div class="output-note" style="margin-top:8px;">Diagnostics JSON</div>
         <p id="fusionResultDiagnosticsJson" class="fine-print" style="margin: 0 0 8px;">Diagnostics JSON hidden. Use Copy Diagnostics if needed.</p>
+        <div class="output-note" style="margin-top:8px;">Assembly 3D body audit（assembly_3d）</div>
+        <div id="fusionAssembly3dBodyAuditWrap" class="fusion-assembly-placement-table-wrap" style="display: none;">
+          <table class="diag-pipeline-table fusion-assembly-placement-table" style="min-width: 100%; font-size: 11px;">
+            <thead>
+              <tr>
+                <th>boardId</th>
+                <th>profilePlane</th>
+                <th>originMm</th>
+                <th>expectedGlobalSizeMm</th>
+                <th>createdBodyBoundingBoxMm</th>
+                <th>status</th>
+                <th>placementRuleUsed</th>
+              </tr>
+            </thead>
+            <tbody id="fusionAssembly3dBodyAuditTbody"></tbody>
+          </table>
+        </div>
+        <div class="output-note" style="margin-top:8px;">Assembly 3D body audit（JSON）</div>
+        <pre id="fusionAssembly3dBodyAuditFullPre" class="json-block" style="max-height:220px;">—</pre>
         <div class="output-note" style="margin-top:8px;">Flat body audit（摘要表）</div>
         <div id="fusionBodyAuditWrap" class="fusion-body-audit-table-wrap" style="display: none;">
           <table class="diag-pipeline-table fusion-body-audit-table" style="min-width: 100%; font-size: 11px;">
@@ -962,6 +1162,7 @@
         <pre id="fusionResultErrors" class="json-block" style="max-height:160px;">—</pre>
         <div class="output-note" style="margin-top:8px;">warnings</div>
         <pre id="fusionResultWarnings" class="json-block" style="max-height:120px;">—</pre>
+        </div>
       </div>
     </section>
 
@@ -1135,7 +1336,7 @@
       </aside>
     </main>
 
-    <section id="pureParamsPanel" class="card debug-panel">
+    <section id="pureParamsPanel" class="card debug-panel debug-only">
       <div class="section-header">
         <div class="section-title">PureParams / Debug JSON</div>
         <div class="debug-actions">
@@ -1255,7 +1456,7 @@
       </div>
     </section>
 
-    <section id="boardPlanPanel" class="card debug-panel">
+    <section id="boardPlanPanel" class="card debug-panel debug-only">
       <div class="section-header">
         <div class="section-title">Board Plan</div>
         <div class="debug-actions">
@@ -1291,7 +1492,7 @@
       </div>
     </section>
 
-    <section id="vProfilePanel" class="card v-profile-panel">
+    <section id="vProfilePanel" class="card v-profile-panel debug-only">
       <div class="section-header">
         <div class="section-title">V Profiles (debug)</div>
       </div>
@@ -1345,7 +1546,7 @@
       </div>
     </section>
 
-    <section id="generateDiagnosticsPanel" class="card" style="margin: 0 12px 12px; display: none;">
+    <section id="generateDiagnosticsPanel" class="card debug-only" style="margin: 0 12px 12px; display: none;">
       <div class="section-header">
         <div class="section-title">Generate Diagnostics Pipeline</div>
         <div class="debug-actions">
@@ -1384,7 +1585,37 @@
       if (el) el.textContent = 'Build: ' + PALETTE_BUILD_ID;
     })();
 
+    var FRIDGE_DEBUG_MODE_LS_KEY = 'fridgeCabinetGenerator.debugMode';
+    function readDebugMode() {
+      try {
+        return localStorage.getItem(FRIDGE_DEBUG_MODE_LS_KEY) === 'true';
+      } catch (e) {
+        return false;
+      }
+    }
+    function writeDebugMode(on) {
+      try {
+        localStorage.setItem(FRIDGE_DEBUG_MODE_LS_KEY, on ? 'true' : 'false');
+      } catch (e) { /* ignore */ }
+    }
+    function applyDebugMode(on) {
+      document.body.classList.toggle('debug-mode', !!on);
+      var cb = document.getElementById('debugModeCb');
+      if (cb) cb.checked = !!on;
+    }
+    (function initDebugModeToggle() {
+      applyDebugMode(readDebugMode());
+      var cb = document.getElementById('debugModeCb');
+      if (cb) {
+        cb.addEventListener('change', function () {
+          writeDebugMode(cb.checked);
+          applyDebugMode(cb.checked);
+        });
+      }
+    })();
+
     const inputIds = [
+      'cabinetWidth',
       'cabinetDepth',
       'cabinetHeight',
       'panelThickness',
@@ -1441,9 +1672,9 @@
     };
 
     let stack = [
-      { id: 'flap-1', type: 'flap', height: 200 },
+      { id: 'flap-1', type: 'flap', height: 195 },
       { id: 'drawer-1', type: 'drawer', height: 250 },
-      { id: 'fridge-1', type: 'fridge', height: 1490 },
+      { id: 'fridge-1', type: 'fridge', height: 1470 },
     ];
     let pureParamsDebugVisible = false;
     let boardPlanDebugVisible = false;
@@ -1472,10 +1703,24 @@
     }
 
     function calculatedCabinetWidth() {
-      return FridgeCabinetLogic.cabinetWidthFromFridge(
-        numberValue('fridgeWidth'),
-        document.getElementById('exteriorSide').value,
-      );
+      return numberValue('cabinetWidth');
+    }
+
+    function widthAllowance() {
+      return document.getElementById('exteriorSide').value === 'none' ? 45 : 61;
+    }
+
+    function setNumberValue(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.value = String(Math.max(0, Math.round(Number(value) || 0)));
+    }
+
+    function syncCabinetWidthFromFridge() {
+      setNumberValue('cabinetWidth', numberValue('fridgeWidth') + widthAllowance());
+    }
+
+    function syncFridgeWidthFromCabinet() {
+      setNumberValue('fridgeWidth', numberValue('cabinetWidth') - widthAllowance());
     }
 
     function wheelAvoidanceEnabled() {
@@ -1574,7 +1819,7 @@
       const exteriorSide = document.getElementById('exteriorSide').value;
       return {
         cabinet: {
-          width: FridgeCabinetLogic.cabinetWidthFromFridge(numberValue('fridgeWidth'), exteriorSide),
+          width: numberValue('cabinetWidth'),
           depth: numberValue('cabinetDepth'),
           height: numberValue('cabinetHeight'),
           panelThickness: numberValue('panelThickness'),
@@ -1736,7 +1981,10 @@
       editor.querySelectorAll('[data-edit-height]').forEach((input) => {
         input.addEventListener('input', () => {
           const segment = stack.find((item) => item.id === input.dataset.editHeight);
-          if (segment) segment.height = Math.max(0, Number(input.value) || 0);
+          if (segment) {
+            segment.height = Math.max(0, Number(input.value) || 0);
+            if (segment.type === 'fridge') document.getElementById('fridgeHeight').value = String(segment.height);
+          }
           debouncedRenderSummaries();
         });
         input.addEventListener('blur', () => {
@@ -1744,6 +1992,7 @@
           const segment = stack.find((item) => item.id === input.dataset.editHeight);
           if (segment) {
             segment.height = Math.max(0, Number(input.value) || 0);
+            if (segment.type === 'fridge') document.getElementById('fridgeHeight').value = String(segment.height);
             normalizeNumberInput(input);
           }
           render();
@@ -1755,6 +2004,7 @@
           const segment = stack.find((item) => item.id === input.dataset.editHeight);
           if (segment) {
             segment.height = Math.max(0, Number(input.value) || 0);
+            if (segment.type === 'fridge') document.getElementById('fridgeHeight').value = String(segment.height);
             normalizeNumberInput(input);
           }
           render();
@@ -1890,7 +2140,7 @@
     function addSegment(type) {
       const defaults = {
         drawer: 250,
-        flap: 200,
+        flap: 195,
         fridge: numberValue('fridgeHeight'),
         empty: 100,
         blankPanel: 100,
@@ -1947,6 +2197,8 @@
       const el = document.getElementById(id);
       if (!el) return;
       el.addEventListener('input', () => {
+        if (id === 'fridgeWidth') syncCabinetWidthFromFridge();
+        if (id === 'cabinetWidth') syncFridgeWidthFromCabinet();
         if (id === 'fridgeHeight') {
           const fridge = stack.find((segment) => segment.type === 'fridge');
           if (fridge) fridge.height = Math.max(0, Number(el.value) || 0);
@@ -1956,6 +2208,8 @@
       el.addEventListener('blur', () => {
         clearSummaryDebounce();
         normalizeNumberInput(el);
+        if (id === 'fridgeWidth') syncCabinetWidthFromFridge();
+        if (id === 'cabinetWidth') syncFridgeWidthFromCabinet();
         if (id === 'fridgeHeight') {
           const fridge = stack.find((segment) => segment.type === 'fridge');
           if (fridge) fridge.height = numberValue('fridgeHeight');
@@ -1967,6 +2221,8 @@
         e.preventDefault();
         clearSummaryDebounce();
         normalizeNumberInput(el);
+        if (id === 'fridgeWidth') syncCabinetWidthFromFridge();
+        if (id === 'cabinetWidth') syncFridgeWidthFromCabinet();
         if (id === 'fridgeHeight') {
           const fridge = stack.find((segment) => segment.type === 'fridge');
           if (fridge) fridge.height = numberValue('fridgeHeight');
@@ -1974,7 +2230,10 @@
         render();
       });
     });
-    document.getElementById('exteriorSide').addEventListener('change', render);
+    document.getElementById('exteriorSide').addEventListener('change', () => {
+      syncCabinetWidthFromFridge();
+      render();
+    });
     document.getElementById('wheelAvoidance').addEventListener('change', render);
 
     document.querySelectorAll('[data-type]').forEach((card) => {
@@ -2364,6 +2623,22 @@
 
     window.__pendingJsDiagnosticsByRunId = {};
 
+    function findAssemblyPlacementPlanInJsSteps(jsSteps) {
+      if (!Array.isArray(jsSteps)) return null;
+      for (var i = 0; i < jsSteps.length; i += 1) {
+        var st = jsSteps[i];
+        if (
+          st &&
+          st.id === 'js_build_assembly_placement_plan' &&
+          st.details &&
+          st.details.assemblyPlacementPlan
+        ) {
+          return st.details.assemblyPlacementPlan;
+        }
+      }
+      return null;
+    }
+
     function mergeDiagnosticsForRun(pyResult) {
       var runId =
         (pyResult && (pyResult.generateRunId || (pyResult.diagnostics && pyResult.diagnostics.runId))) || '';
@@ -2385,6 +2660,7 @@
       if (runId && window.__pendingJsDiagnosticsByRunId[runId]) {
         delete window.__pendingJsDiagnosticsByRunId[runId];
       }
+      merged.assemblyPlacementPlan = findAssemblyPlacementPlanInJsSteps(merged.jsSteps);
       return merged;
     }
 
@@ -2414,7 +2690,6 @@
     }
 
     function renderGenerateDiagnostics(diagnostics) {
-      window.__lastGenerateDiagnostics = diagnostics;
       var panel = document.getElementById('generateDiagnosticsPanel');
       var tbody = document.getElementById('generateDiagnosticsTableBody');
       var runEl = document.getElementById('generateDiagRunId');
@@ -2475,6 +2750,11 @@
         if (!Number.isFinite(i) || !steps[i]) return;
         if (detailsPre) detailsPre.textContent = JSON.stringify(steps[i].details || {}, null, 2);
       };
+      diagnostics.assemblyPlacementPlan =
+        findAssemblyPlacementPlanInJsSteps(diagnostics.jsSteps || []) ||
+        diagnostics.assemblyPlacementPlan ||
+        null;
+      window.__lastGenerateDiagnostics = diagnostics;
       var fpVis = document.getElementById('fusionGenerateResultPanel');
       if (fpVis) fpVis.classList.add('is-visible');
     }
@@ -2527,7 +2807,197 @@
       });
     }
 
+    function renderFusionAssembly3dBodyAuditTable(rows) {
+      var wrap = document.getElementById('fusionAssembly3dBodyAuditWrap');
+      var tbody = document.getElementById('fusionAssembly3dBodyAuditTbody');
+      var fullPre = document.getElementById('fusionAssembly3dBodyAuditFullPre');
+      if (!wrap || !tbody) return;
+      while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+      if (!Array.isArray(rows) || rows.length === 0) {
+        wrap.style.display = 'none';
+        if (fullPre) fullPre.textContent = '—';
+        return;
+      }
+      wrap.style.display = 'block';
+      var fmtXYZ = function (o) {
+        if (!o || typeof o !== 'object') return '—';
+        var sx = o.sizeX;
+        var sy = o.sizeY;
+        var sz = o.sizeZ;
+        if (sx == null || sy == null || sz == null) return '—';
+        return [sx, sy, sz]
+          .map(function (x) {
+            return Math.round(Number(x));
+          })
+          .join('×');
+      };
+      rows.forEach(function (r) {
+        var tr = document.createElement('tr');
+        var om = r.originMm;
+        var omStr =
+          om && typeof om === 'object'
+            ? [om.x, om.y, om.z]
+                .map(function (x) {
+                  return x != null && x !== '' ? String(Math.round(Number(x))) : '—';
+                })
+                .join(', ')
+            : '—';
+        var expStr = fmtXYZ(r.expectedGlobalSizeMm);
+        var actStr = fmtXYZ(r.createdBodyBoundingBoxMm);
+        var pru = r.placementRuleUsed != null && r.placementRuleUsed !== '' ? String(r.placementRuleUsed) : '—';
+        [r.boardId, r.profilePlane, omStr, expStr, actStr, r.status || '—', pru].forEach(function (text) {
+          var td = document.createElement('td');
+          td.textContent = text != null && text !== '' ? String(text) : '—';
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      if (fullPre) fullPre.textContent = JSON.stringify(rows, null, 2);
+    }
+
+    function renderFusionAssemblyPlacementUI(apPlan) {
+      var setT = function (id, s) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = s == null || s === '' ? '—' : String(s);
+      };
+      var setPre = function (id, s) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = s == null ? '—' : String(s);
+      };
+      if (!apPlan || typeof apPlan !== 'object') {
+        setT('fusionResultAssemblyOk', '—');
+        setT('fusionResultAssemblyPlacedCount', '—');
+        setT('fusionResultAssemblySkippedCount', '—');
+        setT('fusionAssemblyPlanOk', '—');
+        setT('fusionAssemblyPlanPlacedCount', '—');
+        setT('fusionAssemblyPlanSkippedCount', '—');
+        setT('fusionAssemblyPlanPlacedIds', '—');
+        setT('fusionAssemblyPlanSkippedIds', '—');
+        setPre('fusionAssemblyPlanWarningsPre', '—');
+        var wrap0 = document.getElementById('fusionAssemblyPlacementWrap');
+        var tbody0 = document.getElementById('fusionAssemblyPlacementTbody');
+        if (wrap0) wrap0.style.display = 'none';
+        if (tbody0) while (tbody0.firstChild) tbody0.removeChild(tbody0.firstChild);
+        setPre('fusionAssemblyPlacementFullPre', '—');
+        return;
+      }
+      var okStr = apPlan.ok === true ? 'true' : apPlan.ok === false ? 'false' : '—';
+      setT('fusionResultAssemblyOk', okStr);
+      setT('fusionAssemblyPlanOk', okStr);
+      var pc = apPlan.placedCount;
+      var sc = apPlan.skippedCount;
+      setT('fusionResultAssemblyPlacedCount', pc != null ? String(pc) : '—');
+      setT('fusionResultAssemblySkippedCount', sc != null ? String(sc) : '—');
+      setT('fusionAssemblyPlanPlacedCount', pc != null ? String(pc) : '—');
+      setT('fusionAssemblyPlanSkippedCount', sc != null ? String(sc) : '—');
+      var pids = apPlan.placedBoardIds;
+      var sids = apPlan.skippedBoardIds;
+      setT(
+        'fusionAssemblyPlanPlacedIds',
+        Array.isArray(pids) && pids.length ? pids.join(', ') : '(none)',
+      );
+      setT(
+        'fusionAssemblyPlanSkippedIds',
+        Array.isArray(sids) && sids.length ? sids.join(', ') : '(none)',
+      );
+      var warns = apPlan.warnings;
+      setPre(
+        'fusionAssemblyPlanWarningsPre',
+        Array.isArray(warns) && warns.length ? JSON.stringify(warns, null, 2) : '—',
+      );
+      var wrap = document.getElementById('fusionAssemblyPlacementWrap');
+      var tbody = document.getElementById('fusionAssemblyPlacementTbody');
+      if (tbody) {
+        while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+        var rows = apPlan.boardRows;
+        if (Array.isArray(rows) && rows.length && wrap) {
+          wrap.style.display = 'block';
+          rows.forEach(function (r) {
+            var tr = document.createElement('tr');
+            var om = r.originMm;
+            var statusNotes = (r.status || '—') + (r.notes ? ' / ' + r.notes : '');
+            var cells = [
+              r.boardId,
+              r.series,
+              r.type,
+              om && om.x != null ? String(Math.round(Number(om.x))) : '—',
+              om && om.y != null ? String(Math.round(Number(om.y))) : '—',
+              om && om.z != null ? String(Math.round(Number(om.z))) : '—',
+              r.profilePlane,
+              r.thicknessAxis,
+              r.profileAxisU,
+              r.profileAxisV,
+              statusNotes,
+            ];
+            cells.forEach(function (text) {
+              var td = document.createElement('td');
+              td.textContent = text != null && text !== '' ? String(text) : '—';
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          });
+        } else if (wrap) {
+          wrap.style.display = 'none';
+        }
+      }
+      var fullPre = document.getElementById('fusionAssemblyPlacementFullPre');
+      if (fullPre) {
+        try {
+          var exportObj = {
+            ok: apPlan.ok,
+            coordinateSystem: apPlan.coordinateSystem,
+            placements: apPlan.placements,
+            errors: apPlan.errors,
+            warnings: apPlan.warnings,
+            placedBoardIds: apPlan.placedBoardIds,
+            skippedBoardIds: apPlan.skippedBoardIds,
+            placedCount: apPlan.placedCount,
+            skippedCount: apPlan.skippedCount,
+            boardRows: apPlan.boardRows,
+          };
+          fullPre.textContent = JSON.stringify(exportObj, null, 2);
+        } catch (eFull) {
+          fullPre.textContent = '—';
+        }
+      }
+    }
+
+    function updateFusionCompactResult(j, finalStatus, errs, warnParts) {
+      var wrap = document.getElementById('fusionCompactResultWrap');
+      if (!wrap) return;
+      var stRaw = finalStatus != null ? String(finalStatus) : '';
+      var stLower = stRaw.toLowerCase();
+      var isFail = stLower === 'fail' || stLower === 'error' || stLower === 'failed';
+      wrap.classList.toggle('is-fail', isFail);
+      var statusLabel = '—';
+      if (stRaw) {
+        if (stLower === 'pass') statusLabel = 'Pass';
+        else if (isFail) statusLabel = 'Fail';
+        else statusLabel = stRaw;
+      }
+      var pm = j && j.previewMode != null && j.previewMode !== '' ? String(j.previewMode) : '—';
+      var bodies = j && typeof j.createdBodies === 'number' ? String(j.createdBodies) : '—';
+      var skArr = j && Array.isArray(j.skippedBoardIds) ? j.skippedBoardIds : [];
+      var errArr = Array.isArray(errs) ? errs : [];
+      var warnN = Array.isArray(warnParts) ? warnParts.length : 0;
+      function setC(id, txt) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = txt;
+      }
+      setC('fusionCompactStatus', statusLabel);
+      setC('fusionCompactPreviewMode', pm);
+      setC('fusionCompactBodies', bodies);
+      setC('fusionCompactSkippedCount', String(skArr.length));
+      setC('fusionCompactErrorsCount', String(errArr.length));
+      setC('fusionCompactWarningsCount', String(warnN));
+      var fb = document.getElementById('fusionCompactFailBlock');
+      if (fb) fb.style.display = isFail ? 'block' : 'none';
+      setC('fusionCompactFailedStep', j && j.failedStep != null && j.failedStep !== '' ? String(j.failedStep) : '—');
+      setC('fusionCompactFirstError', errArr.length ? String(errArr[0]) : '—');
+    }
+
     function renderFusionGenerateResult(j) {
+      j = j || {};
       const panel = document.getElementById('fusionGenerateResultPanel');
       const setText = (id, s) => {
         const el = document.getElementById(id);
@@ -2537,11 +3007,14 @@
         const el = document.getElementById(id);
         if (el) el.textContent = s;
       };
-      if (j && j.diagnostics) {
-        var merged = mergeDiagnosticsForRun(j);
-        window.__lastGenerateDiagnostics = merged;
-        renderGenerateDiagnostics(merged);
+      var apPlan = null;
+      if (j && (j.diagnostics != null || (j.generateRunId != null && String(j.generateRunId) !== ''))) {
+        var mergedDiag = mergeDiagnosticsForRun(j);
+        window.__lastGenerateDiagnostics = mergedDiag;
+        renderGenerateDiagnostics(mergedDiag);
+        apPlan = mergedDiag.assemblyPlacementPlan || null;
       }
+      setText('fusionResultPreviewMode', j.previewMode != null && j.previewMode !== '' ? String(j.previewMode) : '—');
       setText('fusionResultPureOk', fmtTriState(j.pureParamsValidationOk));
       setText('fusionResultBoardOk', fmtTriState(j.boardPlanValidationOk));
       setText('fusionResultVVerifyOk', fmtTriState(j.vVerifyOk));
@@ -2566,6 +3039,7 @@
         setText('fusionResultSkippedBoardIds', '—');
       }
       renderFusionBodyAuditTable(j.bodyAudit);
+      renderFusionAssembly3dBodyAuditTable(j.assemblyBodyAudit);
       var auditFull = document.getElementById('fusionBodyAuditFullPre');
       if (auditFull) {
         if (Array.isArray(j.bodyAudit) && j.bodyAudit.length) {
@@ -2615,6 +3089,8 @@
         warnParts.push('generateDebug:\n' + JSON.stringify(j.generateDebug, null, 2));
       }
       setPre('fusionResultWarnings', warnParts.length ? warnParts.join('\n\n') : '—');
+      updateFusionCompactResult(j, finalStatus, errs, warnParts);
+      renderFusionAssemblyPlacementUI(apPlan);
       if (panel) panel.classList.add('is-visible');
       refreshActualFusionSendPanel();
     }
@@ -2809,6 +3285,112 @@
             boardErrorsSample: Array.isArray(bv.errors) ? bv.errors.slice(0, 5).map(String) : [],
           },
         );
+        var metadataAudit = FridgeCabinetLogic.auditBoardMetadata(boardPlan);
+        pushGeneratePipelineStep(
+          diagnostics,
+          'js_audit_board_metadata',
+          'JS',
+          metadataAudit.ok ? 'pass' : 'fail',
+          'metadataAudit.ok=' +
+            String(metadataAudit.ok) +
+            '; boards=' +
+            String(metadataAudit.boardCount) +
+            '; errors=' +
+            String((metadataAudit.errors && metadataAudit.errors.length) || 0) +
+            '; warnings=' +
+            String((metadataAudit.warnings && metadataAudit.warnings.length) || 0),
+          {
+            metadataAuditOk: metadataAudit.ok,
+            boardCount: metadataAudit.boardCount,
+            errorsCount: (metadataAudit.errors && metadataAudit.errors.length) || 0,
+            warningsCount: (metadataAudit.warnings && metadataAudit.warnings.length) || 0,
+            legacyGeometryMismatchCount:
+              (metadataAudit.summary &&
+                metadataAudit.summary.legacyGeometryMismatch &&
+                metadataAudit.summary.legacyGeometryMismatch.length) ||
+              0,
+          },
+        );
+        var assemblyPlacement = FridgeCabinetLogic.buildAssemblyPlacementPlan(pureParams, boardPlan);
+        var placedIds = Object.keys(assemblyPlacement.placements || {});
+        var apWarnings = assemblyPlacement.warnings || [];
+        var placedBoardIds = placedIds.slice().sort();
+        var skippedBoardIds = boards
+          .filter(function (b) {
+            return !b || !b.placement || b.placement.assembly == null;
+          })
+          .map(function (b) {
+            return b.id;
+          });
+        var boardRows = boards.map(function (b) {
+          var a = b.placement && b.placement.assembly;
+          var ori = a && a.orientation;
+          var o = a && a.originMm;
+          var originMm =
+            o && typeof o === 'object'
+              ? { x: o.x, y: o.y, z: o.z }
+              : null;
+          var rowNotes = [];
+          if (a && Array.isArray(a.notes) && a.notes.length) rowNotes = a.notes.slice();
+          else if (!a) rowNotes.push('not placed in assembly v0.1');
+          return {
+            boardId: b.id,
+            series: b.series != null ? String(b.series) : '—',
+            type: b.type != null ? String(b.type) : '—',
+            originMm: originMm,
+            profilePlane: ori ? ori.profilePlane : b.profilePlane != null ? String(b.profilePlane) : '—',
+            thicknessAxis: ori ? ori.thicknessAxis : '—',
+            profileAxisU: ori ? ori.profileAxisU : '—',
+            profileAxisV: ori ? ori.profileAxisV : '—',
+            status: a ? 'placed' : 'skipped',
+            notes: rowNotes.join('; '),
+          };
+        });
+        var assemblyPlacementPlan = {
+          ok: assemblyPlacement.ok,
+          coordinateSystem: assemblyPlacement.coordinateSystem,
+          placements: assemblyPlacement.placements,
+          errors: assemblyPlacement.errors || [],
+          warnings: assemblyPlacement.warnings || [],
+          placementDimensionAudit: assemblyPlacement.placementDimensionAudit || [],
+          placementDimensionAuditOk: assemblyPlacement.placementDimensionAuditOk,
+          placedBoardIds: placedBoardIds,
+          skippedBoardIds: skippedBoardIds,
+          placedCount: placedBoardIds.length,
+          skippedCount: skippedBoardIds.length,
+          boardRows: boardRows,
+        };
+        var placementPreview = placedIds.slice(0, 6).map(function (id) {
+          var p = assemblyPlacement.placements[id];
+          return p && p.originMm
+            ? { boardId: id, originMm: p.originMm }
+            : { boardId: id };
+        });
+        pushGeneratePipelineStep(
+          diagnostics,
+          'js_build_assembly_placement_plan',
+          'JS',
+          assemblyPlacement.ok ? 'pass' : 'fail',
+          'assemblyPlacement.ok=' +
+            String(assemblyPlacement.ok) +
+            '; placed=' +
+            String(placedBoardIds.length) +
+            '; skipped=' +
+            String(skippedBoardIds.length) +
+            '; errors=' +
+            String((assemblyPlacement.errors && assemblyPlacement.errors.length) || 0) +
+            '; warnings=' +
+            String(apWarnings.length),
+          {
+            assemblyPlacementOk: assemblyPlacement.ok,
+            placedBoardCount: placedBoardIds.length,
+            skippedBoardCount: skippedBoardIds.length,
+            errorsCount: (assemblyPlacement.errors && assemblyPlacement.errors.length) || 0,
+            warningsCount: apWarnings.length,
+            placementPreview: placementPreview,
+            assemblyPlacementPlan: assemblyPlacementPlan,
+          },
+        );
       } catch (e2) {
         pushGeneratePipelineStep(
           diagnostics,
@@ -2855,7 +3437,7 @@
 
       diagnostics.jsFinishedAt = new Date().toISOString();
       var diagOnlyEl = document.getElementById('generateDiagnosticsOnlyCb');
-      var diagnosticsOnly = diagOnlyEl ? !!diagOnlyEl.checked : true;
+      var diagnosticsOnly = diagOnlyEl ? !!diagOnlyEl.checked : false;
       window.__pendingJsDiagnosticsByRunId[runId] = {
         runId: runId,
         jsSteps: diagnostics.jsSteps.slice(),
@@ -2864,10 +3446,17 @@
         diagnosticsOnly: diagnosticsOnly,
       };
 
+      var previewModeEl = document.getElementById('generatePreviewModeSel');
+      var previewMode =
+        previewModeEl && (previewModeEl.value === 'flat_xy' || previewModeEl.value === 'assembly_3d')
+          ? previewModeEl.value
+          : 'assembly_3d';
+
       var payload = {
         type: FUSION_GENERATE_PAYLOAD_TYPE,
         runId: runId,
         diagnosticsOnly: diagnosticsOnly,
+        previewMode: previewMode,
         params: pureParams,
         boardPlan: boardPlan,
         vVerify: vVerify,
@@ -2976,6 +3565,22 @@
       );
       pushGeneratePipelineStep(
         diagnostics,
+        'js_audit_board_metadata',
+        'JS',
+        'skipped',
+        '—',
+        {},
+      );
+      pushGeneratePipelineStep(
+        diagnostics,
+        'js_build_assembly_placement_plan',
+        'JS',
+        'skipped',
+        '—',
+        {},
+      );
+      pushGeneratePipelineStep(
+        diagnostics,
         'js_verify_v_series',
         'JS',
         'skipped',
@@ -2985,7 +3590,7 @@
 
       diagnostics.jsFinishedAt = new Date().toISOString();
       var diagOnlyMini = document.getElementById('generateDiagnosticsOnlyCb');
-      var diagnosticsOnlyMini = diagOnlyMini ? !!diagOnlyMini.checked : true;
+      var diagnosticsOnlyMini = diagOnlyMini ? !!diagOnlyMini.checked : false;
       window.__pendingJsDiagnosticsByRunId[runId] = {
         runId: runId,
         jsSteps: diagnostics.jsSteps.slice(),

@@ -22,6 +22,7 @@ class HalfSlotService:
         return self._create_slot_variant(full_depth=True)
 
     def _create_slot_variant(self, full_depth):
+        self._clear_debug_log()
         selected = self.fusion.selected_bodies()
         if len(selected) < 2:
             return ["Select at least 2 bodies first."]
@@ -60,15 +61,27 @@ class HalfSlotService:
         ] + detail_lines
 
     def _current_models_by_tokens(self, ordered_tokens):
-        design = self.fusion.get_active_design()
-        if not design:
-            return []
-        current_pairs = self.fusion.all_project_bodies(design)
+        # Fast path: refresh only the currently selected bodies. This is much
+        # cheaper than rescanning the entire design for every pair we process.
         by_token = {}
+        current_pairs = self.fusion.selected_bodies()
         for owner, body in current_pairs:
             token = getattr(body, "entityToken", None)
             if token:
                 by_token[token] = BodyModel.from_brep_body(owner, body)
+
+        missing = [token for token in ordered_tokens if token not in by_token]
+        if missing:
+            # Fallback only when selection context changed and we can no longer
+            # refresh every chosen body from the active selection.
+            design = self.fusion.get_active_design()
+            if not design:
+                return [by_token[token] for token in ordered_tokens if token in by_token]
+            current_pairs = self.fusion.all_project_bodies(design)
+            for owner, body in current_pairs:
+                token = getattr(body, "entityToken", None)
+                if token and token in missing:
+                    by_token[token] = BodyModel.from_brep_body(owner, body)
         return [by_token[token] for token in ordered_tokens if token in by_token]
 
     def _apply_slot_pair(self, pair, full_depth, variant_label):
@@ -170,7 +183,7 @@ class HalfSlotService:
             f"Slot depth: {extrude_mm:.2f} mm",
             f"Tongue height: {tongue_height_mm:.2f} mm",
             "",
-        ] + self._consume_debug_log()
+        ]
 
     def _create_joined_tongue(self, body, face, sketch, distance_mm, expected_area_mm2, feature_name, forced_sign):
         if not hasattr(self, "_debug_lines"):
@@ -609,6 +622,9 @@ class HalfSlotService:
         if not logs:
             return []
         return ["", "Debug:"] + logs
+
+    def _clear_debug_log(self):
+        self._debug_lines = []
 
     def _contact_candidates(self, a_body, b_body):
         a = a_body.boundingBox

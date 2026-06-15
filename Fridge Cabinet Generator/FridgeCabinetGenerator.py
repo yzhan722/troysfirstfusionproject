@@ -602,7 +602,12 @@ class FridgeCabinetGeneratorApp:
             }
         )
 
-        diagnostics_only = bool(parsed.get("diagnosticsOnly", True))
+        diagnostics_only = bool(parsed.get("diagnosticsOnly", False))
+
+        preview_mode_raw = parsed.get("previewMode") if isinstance(parsed, dict) else None
+        if preview_mode_raw is None and isinstance(parsed, dict):
+            preview_mode_raw = parsed.get("preview_mode")
+        preview_mode = preview_mode_raw if preview_mode_raw in ("flat_xy", "assembly_3d") else "assembly_3d"
 
         received_board_plan = parsed.get("boardPlan") if isinstance(parsed, dict) else None
         received_v_verify = parsed.get("vVerify") if isinstance(parsed, dict) else None
@@ -617,6 +622,7 @@ class FridgeCabinetGeneratorApp:
             diagnostics_only,
             received_board_plan=received_board_plan,
             received_v_verify=received_v_verify,
+            preview_mode=preview_mode,
         )
 
     def _send_fridge_result(self, result):
@@ -642,9 +648,10 @@ class FridgeCabinetGeneratorApp:
         self,
         pure_params,
         diagnostics,
-        diagnostics_only=True,
+        diagnostics_only=False,
         received_board_plan=None,
         received_v_verify=None,
+        preview_mode="assembly_3d",
     ):
         rid = diagnostics.get("runId") if isinstance(diagnostics, dict) else _new_run_id()
         result = {
@@ -653,6 +660,7 @@ class FridgeCabinetGeneratorApp:
             "generateRunId": rid,
             "diagnostics": diagnostics,
             "diagnosticsOnly": diagnostics_only,
+            "previewMode": preview_mode,
             "pureParamsValidationOk": _validation_ok_tri_state(pure_params.get("validation")),
             "boardPlanValidationOk": None,
             "vVerifyOk": None,
@@ -660,6 +668,7 @@ class FridgeCabinetGeneratorApp:
             "skippedBoards": [],
             "errors": [],
             "warnings": [],
+            "assemblyGeometryOk": None,
         }
 
         v_verify_source = None
@@ -820,10 +829,11 @@ class FridgeCabinetGeneratorApp:
             result["warnings"].append("diagnosticsOnly: Fusion flat bodies not created.")
             result["finalStatus"] = "pass"
             result["failedStep"] = None
+            result["assemblyBodyAudit"] = []
             self._send_fridge_result(result)
             return
 
-        step9_details = {"attempted": True, "createdBodies": 0, "skippedBoards": [], "geometryErrors": []}
+        step9_details = {"attempted": True, "createdBodies": 0, "skippedBoards": [], "geometryErrors": [], "previewMode": preview_mode}
         diagnostics["geometryStartedAt"] = _iso_now()
         geo = None
         try:
@@ -831,10 +841,11 @@ class FridgeCabinetGeneratorApp:
 
             importlib.reload(fcg_geom)
             step9_details["geometryBuild"] = getattr(fcg_geom, "GEOMETRY_BUILD", None)
-            geo = fcg_geom.generate_flat_board_bodies(board_plan, 100.0)
+            geo = fcg_geom.generate_flat_board_bodies(board_plan, 100.0, preview_mode=preview_mode)
             if isinstance(geo, dict):
                 step9_details["geometryBuild"] = geo.get("geometryBuild", step9_details.get("geometryBuild"))
                 result["geometryBuild"] = geo.get("geometryBuild")
+            result["previewMode"] = geo.get("previewMode", preview_mode)
             result["createdBodies"] = int(geo.get("createdBodies", 0))
             result["skippedBoards"] = geo.get("skippedBoards", [])
             result["errors"].extend(geo.get("errors", []))
@@ -843,16 +854,27 @@ class FridgeCabinetGeneratorApp:
             result["createdBoardIds"] = list(geo.get("createdBoardIds") or [])
             result["skippedBoardIds"] = list(geo.get("skippedBoardIds") or [])
             result["bodyAudit"] = list(geo.get("bodyAudit") or [])
+            result["assemblyBodyAudit"] = list(geo.get("assemblyBodyAudit") or [])
             result["flatPreviewRows"] = list(geo.get("flatPreviewRows") or [])
+            if preview_mode == "assembly_3d":
+                result["assemblyGeometryOk"] = bool(geo.get("assemblyGeometryOk"))
+            else:
+                result["assemblyGeometryOk"] = None
             step9_details["createdBodies"] = result["createdBodies"]
             step9_details["skippedBoards"] = result["skippedBoards"]
             step9_details["geometryErrors"] = list(geo.get("errors", []))[:5]
             step9_details["boardPlanBoardCount"] = result.get("boardPlanBoardCount")
             step9_details["bodyAuditCount"] = len(result.get("bodyAudit") or [])
+            step9_details["assemblyBodyAuditCount"] = len(result.get("assemblyBodyAudit") or [])
+            step9_details["assemblyGeometryOk"] = result.get("assemblyGeometryOk")
         except Exception:
             tb = traceback.format_exc()
             result["errors"].append(tb)
             step9_details["exception"] = tb[:300]
+            result.setdefault("assemblyBodyAudit", [])
+            result.setdefault("bodyAudit", [])
+            if preview_mode == "assembly_3d":
+                result["assemblyGeometryOk"] = False
             try:
                 import fridge_flat_board_geometry as fcg_geom
 
@@ -883,6 +905,10 @@ class FridgeCabinetGeneratorApp:
         else:
             result["finalStatus"] = "pass"
             result["failedStep"] = None
+        if preview_mode == "assembly_3d" and result.get("assemblyGeometryOk") is not True:
+            result["finalStatus"] = "fail"
+            if not geo_only_errors:
+                result["failedStep"] = "assembly_geometry_audit"
         self._send_fridge_result(result)
 
 
