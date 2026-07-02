@@ -108,7 +108,9 @@ class UnifiedCabinetPluginApp:
             "panelAttributes.scanSelectedMetadata": panel_attributes.scan_selected_metadata,
             "panelAttributes.tagScanSelected": panel_attributes.tag_scan_selected,
             "panelAttributes.applyTagScanDrafts": panel_attributes.apply_tag_scan_drafts,
-            "panelAttributes.setAssemblyZone": panel_attributes.set_assembly_zone,
+            "panelAttributes.setWorkZones": panel_attributes.set_work_zones,
+            "panelAttributes.setAssemblyZone": panel_attributes.set_work_zones,
+            "panelAttributes.getWorkZones": panel_attributes.get_work_zones,
             "pingPython": self._ping,
         }
         self.palette_controller = PaletteController(

@@ -6,6 +6,35 @@ import subprocess
 from modules.lounge import fusion_adapter as lounge_fusion_adapter
 
 
+def _naming_args(payload, fusion=None):
+    """assemblyName / origin from a palette payload; origin falls back to the
+    generation-zone centre when not explicitly provided."""
+    data = payload if isinstance(payload, dict) else {}
+    name = data.get("assemblyName")
+    name = str(name).strip() if name else ""
+
+    origin_x = origin_y = 0.0
+    try:
+        import work_zones
+
+        root = fusion.get_root_component() if fusion is not None else None
+        origin_x, origin_y = work_zones.resolve_origin_from_payload(data, root)
+    except Exception:
+        def _num(key):
+            try:
+                return float(data.get(key) or 0.0)
+            except Exception:
+                return 0.0
+
+        origin_x, origin_y = _num("originXMm"), _num("originYMm")
+
+    return {
+        "component_name": name or None,
+        "origin_x_mm": origin_x,
+        "origin_y_mm": origin_y,
+    }
+
+
 def _candidate_node_paths():
     candidates = []
     env_node_exe = os.environ.get("NODE_EXE")
@@ -127,7 +156,7 @@ class LoungeController:
         import importlib
 
         adapter_module = importlib.reload(lounge_fusion_adapter)
-        summary = adapter_module.create_lounge_bodies(self.fusion, result, run_label=run_label)
+        summary = adapter_module.create_lounge_bodies(self.fusion, result, run_label=run_label, **_naming_args(payload, self.fusion))
         summary["ok"] = len(summary.get("errors") or []) == 0
         summary["action"] = "lounge.createFlatBodies"
         return ("loungeFlatBodyResult", summary)
@@ -152,7 +181,7 @@ class LoungeController:
         import importlib
 
         adapter_module = importlib.reload(lounge_fusion_adapter)
-        summary = adapter_module.create_lounge_assembly_bodies(self.fusion, result, run_label=run_label)
+        summary = adapter_module.create_lounge_assembly_bodies(self.fusion, result, run_label=run_label, **_naming_args(payload, self.fusion))
         summary["ok"] = len(summary.get("errors") or []) == 0
         summary["action"] = "lounge.createAssemblyBodies"
         return ("loungeAssemblyBodyResult", summary)

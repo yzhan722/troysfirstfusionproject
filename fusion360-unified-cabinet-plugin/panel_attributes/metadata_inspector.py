@@ -13,6 +13,11 @@ try:
 except Exception:
     list_body_face_records = None
 
+try:
+    import work_zones
+except Exception:
+    work_zones = None
+
 LEGACY_ATTRIBUTE_GROUP = "UnifiedCabinetPlugin"
 
 
@@ -363,21 +368,37 @@ def _entity_record(entity, entity_kind, occurrence_path, component_name="", body
     return record
 
 
+WORK_ZONE_BODY_NAMES = {"AssemblyZone", "GenerationZone", "NestingZone"}
+
+
 def _is_assembly_zone(body):
-    """True for the Assembly Zone helper body so it is never treated as a panel."""
+    """True for work-zone helper planes so they are never treated as panels."""
     try:
         attr = body.attributes.itemByName("UnifiedCabinet", "systemRole")
-        if attr and str(attr.value) == "assemblyZone":
+        if attr and str(attr.value) in ("assemblyZone", "workZone"):
             return True
     except Exception:
         pass
     try:
-        return str(getattr(body, "name", "") or "") == "AssemblyZone"
+        return str(getattr(body, "name", "") or "") in WORK_ZONE_BODY_NAMES
     except Exception:
         return False
 
 
-def _walk_component(component, occurrence_path, sink):
+def _is_nested_instance(body):
+    if work_zones is not None:
+        try:
+            return work_zones.is_nested_instance(body)
+        except Exception:
+            return False
+    try:
+        attr = body.attributes.itemByName("UnifiedCabinet", "instanceRole")
+        return bool(attr and str(attr.value) == "nested")
+    except Exception:
+        return False
+
+
+def _walk_component(component, occurrence_path, sink, zone_context=None):
     if not component:
         return
 
@@ -393,6 +414,10 @@ def _walk_component(component, occurrence_path, sink):
     for body in list_solid_bodies(component):
         if _is_assembly_zone(body):
             continue
+        # Nested copies (nesting layout output) are never scanned as panels:
+        # they duplicate the panelId of the assembly-zone original.
+        if _is_nested_instance(body):
+            continue
         body_record = _entity_record(
             body,
             "body",
@@ -400,8 +425,23 @@ def _walk_component(component, occurrence_path, sink):
             component_name=getattr(component, "name", "") or "",
             body_name=getattr(body, "name", "") or "",
         )
-        if body_record:
-            sink.append(body_record)
+        if not body_record:
+            continue
+        layout = (zone_context or {}).get("layout")
+        if layout is not None and work_zones is not None:
+            zone = work_zones.zone_of_body(body, layout)
+            body_record["zone"] = zone
+            role = work_zones.instance_role_of_body(body)
+            if role:
+                body_record["instanceRole"] = role
+            if zone == work_zones.ZONE_NESTING:
+                body_record.setdefault("warnings", []).append(
+                    "Body sits in the nesting zone but is not marked as a nested instance."
+                )
+            zone_filter = (zone_context or {}).get("filter")
+            if zone_filter and zone_filter != "all" and zone != zone_filter:
+                continue
+        sink.append(body_record)
 
     try:
         occurrences = component.occurrences
@@ -410,12 +450,21 @@ def _walk_component(component, occurrence_path, sink):
         return
     for index in range(count):
         occurrence = occurrences.item(index)
-        _walk_component(occurrence.component, occurrence_path + [index], sink)
+        _walk_component(occurrence.component, occurrence_path + [index], sink, zone_context)
 
 
-def scan_panel_metadata(root_component):
+def scan_panel_metadata(root_component, zone_filter=None):
     records = []
-    _walk_component(root_component, [], records)
+    layout = None
+    if work_zones is not None:
+        try:
+            layout = work_zones.load_zone_layout(root_component)
+        except Exception:
+            layout = None
+    # The zone filter only applies when work zones exist in the design;
+    # without zones every body is scanned (safe default).
+    zone_context = {"layout": layout, "filter": zone_filter if layout else None}
+    _walk_component(root_component, [], records, zone_context)
     return _finalize_records(records)
 
 
@@ -578,7 +627,10 @@ def tag_scan_selected(selected_entities, root_component=None):
             warnings.append("Unsupported selection: {}".format(selection_type))
             continue
         if _is_assembly_zone(body):
-            warnings.append("Skipped Assembly Zone helper body.")
+            warnings.append("Skipped work-zone helper body.")
+            continue
+        if _is_nested_instance(body):
+            warnings.append("Skipped nested-instance copy (nesting output).")
             continue
         if selection_type in ("face", "edge") and _body_key(body) in selected_body_keys:
             continue
@@ -625,7 +677,10 @@ def scan_selected_panel_metadata(selected_entities):
             skipped.append("Unsupported selection: {}".format(source_kind))
             continue
         if _is_assembly_zone(body):
-            skipped.append("Skipped Assembly Zone helper body.")
+            skipped.append("Skipped work-zone helper body.")
+            continue
+        if _is_nested_instance(body):
+            skipped.append("Skipped nested-instance copy (nesting output).")
             continue
         key = _body_key(body)
         if key in seen:

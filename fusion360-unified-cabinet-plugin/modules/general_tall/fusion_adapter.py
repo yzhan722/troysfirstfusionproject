@@ -1,16 +1,35 @@
 import json
 import math
+import os
 import time
 
 import adsk.core
 import adsk.fusion
 
-from geometry_ops import ATTRIBUTE_GROUP, MODEL_Z_OFFSET_MM, mm_to_cm, move_body_by_mm, offset_matching_bodies_z_mm, sanitize_token
+from geometry_ops import ATTRIBUTE_GROUP, MODEL_Z_OFFSET_MM, avoid_existing_at_origin, capture_position_snapshot, mm_to_cm, move_body_by_mm, offset_matching_bodies_z_mm, sanitize_token
 
 
 PANEL_ATTRIBUTE_GROUP = "UnifiedCabinet.Panel"
 PANEL_METADATA_ATTR = "metadata"
 PANEL_ID_ATTR = "panelId"
+
+ADAPTER_BUILD = "2026-07-02-placement-debug-1"
+
+
+def _write_placement_debug(payload):
+    """Dump the placement decision trail to <plugin>/placement_debug.json.
+
+    Ground-truth tracing that works no matter which controller version is
+    cached in Fusion (this adapter is reloaded from disk on every call).
+    """
+    try:
+        debug_path = os.path.abspath(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "placement_debug.json")
+        )
+        with open(debug_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, default=str)
+    except Exception:
+        pass
 
 
 def _is_number(value):
@@ -50,7 +69,7 @@ def _rough_size_mm(bbox):
     )
 
 
-def _new_container_component(root_comp, run_label, module_name="generalTall", create_component=False, component_prefix=None, component_name=None):
+def _new_container_component(root_comp, run_label, module_name="generalTall", create_component=False, component_prefix=None, component_name=None, origin_x_mm=0.0, origin_y_mm=0.0, origin_z_mm=MODEL_Z_OFFSET_MM):
     if component_name:
         resolved_component_name = sanitize_token(component_name, fallback="assembly", limit=80)
     else:
@@ -63,28 +82,74 @@ def _new_container_component(root_comp, run_label, module_name="generalTall", cr
 
     try:
         transform = adsk.core.Matrix3D.create()
-        transform.translation = adsk.core.Vector3D.create(0, 0, mm_to_cm(MODEL_Z_OFFSET_MM))
+        # Work-zone placement uses real model coordinates: generation origin
+        # lives on z=0. Legacy no-zone calls keep MODEL_Z_OFFSET_MM staging.
+        transform.translation = adsk.core.Vector3D.create(
+            mm_to_cm(float(origin_x_mm or 0.0)),
+            mm_to_cm(float(origin_y_mm or 0.0)),
+            mm_to_cm(float(origin_z_mm if origin_z_mm is not None else MODEL_Z_OFFSET_MM)),
+        )
         occurrence = root_comp.occurrences.addNewComponent(transform)
-        occurrence.name = resolved_component_name
         component = occurrence.component
-        component.name = resolved_component_name
-        try:
-            component.attributes.add(ATTRIBUTE_GROUP, "module", module_name)
-            component.attributes.add(ATTRIBUTE_GROUP, "runLabel", str(run_label))
-            component.attributes.add(ATTRIBUTE_GROUP, "assemblyName", resolved_component_name)
-        except Exception:
-            pass
-        return component, None, resolved_component_name
     except Exception as ex:
         return root_comp, "Could not create {} assembly component; using root component instead: {}".format(module_name, ex), None
+
+    # Parametric designs do NOT persist occurrence positions across timeline
+    # recomputes unless a snapshot captures them; lock the placement now so the
+    # feature work below cannot bounce the container back to the origin.
+    _capture_position_snapshot(root_comp)
+
+    # CRITICAL: naming must never abort the placed component. Fusion component
+    # names are unique per design; assigning a duplicate (e.g. "OHC" on the
+    # second run) RAISES, and previously that exception threw the whole
+    # transformed container away, dumping bodies at the root origin.
+    resolved_component_name = _assign_component_name(occurrence, component, resolved_component_name)
+    try:
+        component.attributes.add(ATTRIBUTE_GROUP, "module", module_name)
+        component.attributes.add(ATTRIBUTE_GROUP, "runLabel", str(run_label))
+        component.attributes.add(ATTRIBUTE_GROUP, "assemblyName", resolved_component_name)
+    except Exception:
+        pass
+    return component, None, resolved_component_name
+
+
+def _capture_position_snapshot(root_comp):
+    capture_position_snapshot(root_comp)
+
+
+def _avoid_existing_at_origin(root_comp, origin_x_mm, origin_y_mm, footprint_mm):
+    return avoid_existing_at_origin(root_comp, origin_x_mm, origin_y_mm, footprint_mm)
+
+
+def _assign_component_name(occurrence, component, desired_name):
+    """Rename occurrence+component, auto-suffixing on duplicate-name errors.
+
+    Never raises: a failed rename keeps Fusion's auto name instead of aborting
+    the (already placed) component.
+    """
+    base = sanitize_token(desired_name, fallback="assembly", limit=76)
+    candidates = [base] + ["{}_{}".format(base, index) for index in range(2, 100)]
+    for candidate in candidates:
+        try:
+            component.name = candidate
+        except Exception:
+            continue
+        try:
+            occurrence.name = candidate
+        except Exception:
+            pass
+        return candidate
+    try:
+        return str(component.name)
+    except Exception:
+        return base
 
 
 def _new_child_component(parent_component, component_name, module_name="overhead", board_id=None):
     transform = adsk.core.Matrix3D.create()
     occurrence = parent_component.occurrences.addNewComponent(transform)
-    occurrence.name = component_name
     component = occurrence.component
-    component.name = component_name
+    _assign_component_name(occurrence, component, component_name)
     try:
         component.attributes.add(ATTRIBUTE_GROUP, "module", module_name)
         if board_id is not None:
@@ -268,6 +333,10 @@ def _write_oh_panel_metadata(body, board, bbox, all_boards, run_label):
     panel_id = metadata["identity"]["panelId"]
     ok_id = _set_entity_attribute(body, PANEL_ATTRIBUTE_GROUP, PANEL_ID_ATTR, panel_id)
     ok_payload = _set_entity_attribute(body, PANEL_ATTRIBUTE_GROUP, PANEL_METADATA_ATTR, payload)
+    # Instance lifecycle marker (dual-track zones): generator output is
+    # "generated"; nesting layout copies get "nested" and are excluded from
+    # scans/write-backs.
+    _set_entity_attribute(body, "UnifiedCabinet", "instanceRole", "generated")
     return metadata, ok_id and ok_payload
 
 
@@ -1249,7 +1318,45 @@ def create_rough_bodies_from_board_result(
     create_container_component=False,
     component_prefix=None,
     component_name=None,
+    origin_x_mm=None,
+    origin_y_mm=None,
 ):
+    # None = "auto": place at the generation-zone centre from the saved layout.
+    # This also covers callers that predate the origin parameters, because this
+    # adapter is importlib.reload-ed on every call. When a work-zone or explicit
+    # origin is used, z is real model z=0 instead of legacy MODEL_Z_OFFSET_MM.
+    placement_debug = {
+        "adapterBuild": ADAPTER_BUILD,
+        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "module": str(module_name),
+        "originParam": [origin_x_mm, origin_y_mm],
+        "createContainer": bool(create_container_component),
+        "componentName": component_name,
+    }
+    origin_active = origin_x_mm is not None or origin_y_mm is not None
+    if origin_x_mm is None and origin_y_mm is None:
+        # Read the saved zone layout DIRECTLY (no work_zones import): Fusion's
+        # module cache may hold a stale work_zones without the newer helpers,
+        # and that stale import silently broke auto-centering before.
+        try:
+            root0 = fusion_adapter.get_root_component()
+            attr = root0.attributes.itemByName("UnifiedCabinet", "workZoneLayout") if root0 else None
+            placement_debug["layoutAttrFound"] = bool(attr and attr.value)
+            if attr and attr.value:
+                placement_debug["layoutRaw"] = str(attr.value)[:400]
+                layout = json.loads(attr.value)
+                rect = layout.get("generation") if isinstance(layout, dict) else None
+                if isinstance(rect, dict):
+                    origin_x_mm = (float(rect["x0"]) + float(rect["x1"])) / 2.0
+                    origin_y_mm = (float(rect["y0"]) + float(rect["y1"])) / 2.0
+                    origin_active = True
+        except Exception as ex:
+            placement_debug["layoutError"] = str(ex)
+    origin_x_mm = float(origin_x_mm or 0.0)
+    origin_y_mm = float(origin_y_mm or 0.0)
+    origin_z_mm = 0.0 if origin_active else MODEL_Z_OFFSET_MM
+    placement_debug["resolvedOrigin"] = [origin_x_mm, origin_y_mm, origin_z_mm]
+    placement_debug["originActive"] = bool(origin_active)
     summary = {
         "createdBodies": 0,
         "skippedBoards": [],
@@ -1285,11 +1392,15 @@ def create_rough_bodies_from_board_result(
     root_comp = fusion_adapter.get_root_component()
     if not root_comp:
         summary["errors"].append("No active Fusion design/root component.")
+        placement_debug["abort"] = "no_root_component"
+        _write_placement_debug(placement_debug)
         return summary
 
     boards = result.get("boards")
     if not isinstance(boards, list):
         summary["errors"].append("{} result does not include boards list.".format(module_name))
+        placement_debug["abort"] = "no_boards"
+        _write_placement_debug(placement_debug)
         return summary
     boards_by_id = {str(board.get("id")): board for board in boards if isinstance(board, dict) and board.get("id")}
     bodies_by_id = {}
@@ -1298,6 +1409,32 @@ def create_rough_bodies_from_board_result(
     zi_grooves_by_target = _collect_zi_groove_features(result) if enable_zi_groove_cuts else {}
     result_debug = result.get("debug") if isinstance(result.get("debug"), dict) else {}
 
+    # Spawn avoidance: shift +X in furniture-sized slots when the target spot
+    # already holds generated content.
+    footprint = None
+    try:
+        bboxes = [_board_bbox(board) for board in boards if isinstance(board, dict)]
+        bboxes = [bb for bb in bboxes if bb]
+        if bboxes:
+            footprint = (
+                min(bb["x0"] for bb in bboxes),
+                max(bb["x1"] for bb in bboxes),
+                min(bb["y0"] for bb in bboxes),
+                max(bb["y1"] for bb in bboxes),
+            )
+    except Exception:
+        footprint = None
+    origin_x_mm, origin_y_mm, avoidance_info = _avoid_existing_at_origin(root_comp, origin_x_mm, origin_y_mm, footprint)
+    summary["originAvoidance"] = avoidance_info
+    placement_debug["avoidance"] = avoidance_info
+    placement_debug["resolvedOrigin"] = [origin_x_mm, origin_y_mm, origin_z_mm]
+    if avoidance_info.get("shifted"):
+        summary["warnings"].append(
+            "Generation spot was occupied; assembly shifted +X by {:.0f} mm (slot {}).".format(
+                avoidance_info.get("shiftXMm", 0.0), avoidance_info.get("slots", 0)
+            )
+        )
+
     container, container_warning, assembly_component_name = _new_container_component(
         root_comp,
         summary["runLabel"],
@@ -1305,8 +1442,25 @@ def create_rough_bodies_from_board_result(
         create_component=create_container_component,
         component_prefix=component_prefix,
         component_name=component_name,
+        origin_x_mm=origin_x_mm,
+        origin_y_mm=origin_y_mm,
+        origin_z_mm=origin_z_mm,
     )
     summary["assemblyComponentName"] = assembly_component_name
+    summary["originOffsetMm"] = {"x": float(origin_x_mm or 0.0), "y": float(origin_y_mm or 0.0), "z": float(origin_z_mm)}
+    placement_debug["assemblyComponentName"] = assembly_component_name
+    placement_debug["containerWarning"] = container_warning
+    placement_debug["containerIsRoot"] = container is root_comp
+    try:
+        occurrences0 = root_comp.allOccurrencesByComponent(container) if container is not root_comp else None
+        occurrence0 = occurrences0.item(0) if occurrences0 and occurrences0.count else None
+        if occurrence0 is not None:
+            translation0 = occurrence0.transform.translation
+            placement_debug["containerTransformAfterCreateMm"] = [
+                round(translation0.x * 10.0, 2), round(translation0.y * 10.0, 2), round(translation0.z * 10.0, 2),
+            ]
+    except Exception as ex:
+        placement_debug["containerTransformAfterCreateError"] = str(ex)
     summary["_containerComponent"] = container
     if container_warning:
         summary["warnings"].append(container_warning)
@@ -1336,8 +1490,13 @@ def create_rough_bodies_from_board_result(
         err = None
         target_component = container
         board_component_name = None
-        if enable_overhead_postprocess and create_container_component:
-            board_component_name = "OH_{}".format(sanitize_token(board_id, fallback="board", limit=60))
+        # One board = one child component (assembly semantics), for EVERY module
+        # that has a real assembly container (not the Part-document fallback).
+        if create_container_component and container is not root_comp:
+            board_component_name = "{}_{}".format(
+                sanitize_token(body_prefix, fallback="BOARD", limit=20),
+                sanitize_token(board_id, fallback="board", limit=60),
+            )
             try:
                 target_component = _new_child_component(container, board_component_name, module_name=module_name, board_id=board_id)
                 components_by_id[board_id] = target_component
@@ -1414,7 +1573,11 @@ def create_rough_bodies_from_board_result(
         groove_cuts = []
         if enable_zi_groove_cuts and _is_zi_board(board):
             for groove_feature in zi_grooves_by_target.get(board_id, []):
-                groove_row = _create_zi_groove_cut(container, board, bbox, groove_feature, boards_by_id)
+                # Cut inside the board's own component so the feature reaches
+                # the body that now lives there.
+                groove_row = _create_zi_groove_cut(
+                    components_by_id.get(board_id) or container, board, bbox, groove_feature, boards_by_id
+                )
                 groove_cuts.append(groove_row)
                 status = groove_row.get("status")
                 if status == "created":
@@ -1471,15 +1634,85 @@ def create_rough_bodies_from_board_result(
     if summary["createdBodies"] == 0 and not summary["errors"]:
         summary["warnings"].append("No {} rough bodies were created.".format(module_name))
     if assembly_component_name is None:
-        summary["modelZOffset"] = offset_matching_bodies_z_mm(
-            root_comp,
-            name_prefixes=["{}_".format(body_prefix)],
-            module=module_name,
-            dz_mm=MODEL_Z_OFFSET_MM,
-            feature_prefix="{}_MODEL_Z_OFFSET_".format(sanitize_token(body_prefix, fallback="BODY", limit=20)),
-        )
+        if origin_active and bodies_by_id:
+            # Part documents cannot contain components, so occurrence placement
+            # is impossible; move ALL created bodies to the origin with ONE real
+            # move feature instead (this REPLACES the legacy z=10km staging).
+            moved = 0
+            try:
+                collection = adsk.core.ObjectCollection.create()
+                for body in bodies_by_id.values():
+                    if body is not None:
+                        collection.add(body)
+                if collection.count:
+                    transform = adsk.core.Matrix3D.create()
+                    transform.translation = adsk.core.Vector3D.create(
+                        mm_to_cm(origin_x_mm), mm_to_cm(origin_y_mm), mm_to_cm(origin_z_mm)
+                    )
+                    move_input = container.features.moveFeatures.createInput(collection, transform)
+                    try:
+                        move_input.defineAsFreeMove(transform)
+                    except Exception:
+                        pass
+                    move_feature = container.features.moveFeatures.add(move_input)
+                    move_feature.name = "{}_ORIGIN_PLACE".format(sanitize_token(body_prefix, fallback="BODY", limit=20))
+                    moved = collection.count
+            except Exception as ex:
+                summary["warnings"].append("Origin placement move failed: {}".format(ex))
+            summary["modelZOffset"] = {
+                "offsetMm": float(origin_z_mm),
+                "mode": "bodyMoveOrigin",
+                "movedBodies": moved,
+                "originXMm": origin_x_mm,
+                "originYMm": origin_y_mm,
+            }
+            summary["containerTransformMm"] = {"x": origin_x_mm, "y": origin_y_mm, "z": float(origin_z_mm)}
+            summary["warnings"].append(
+                "This document cannot contain components (Part document); bodies were moved to the origin directly. "
+                "Open an Assembly/Design document to get the full component structure (assembly name, per-board components)."
+            )
+        else:
+            summary["modelZOffset"] = offset_matching_bodies_z_mm(
+                root_comp,
+                name_prefixes=["{}_".format(body_prefix)],
+                module=module_name,
+                dz_mm=MODEL_Z_OFFSET_MM,
+                feature_prefix="{}_MODEL_Z_OFFSET_".format(sanitize_token(body_prefix, fallback="BODY", limit=20)),
+            )
     else:
-        summary["modelZOffset"] = {"offsetMm": MODEL_Z_OFFSET_MM, "mode": "componentOccurrence", "assemblyComponentName": assembly_component_name}
+        summary["modelZOffset"] = {"offsetMm": float(origin_z_mm), "mode": "componentOccurrence", "assemblyComponentName": assembly_component_name}
+
+    # Re-assert + read back the container placement AFTER all features ran, so
+    # the response proves whether the transform survived the recomputes.
+    if assembly_component_name is not None and container is not root_comp:
+        try:
+            occurrences = root_comp.allOccurrencesByComponent(container)
+            occurrence = occurrences.item(0) if occurrences and occurrences.count else None
+            if occurrence is not None:
+                translation = occurrence.transform.translation
+                current = (translation.x * 10.0, translation.y * 10.0, translation.z * 10.0)
+                expected = (origin_x_mm, origin_y_mm, float(origin_z_mm))
+                if any(abs(current[i] - expected[i]) > 0.5 for i in range(3)):
+                    transform = occurrence.transform
+                    transform.translation = adsk.core.Vector3D.create(
+                        mm_to_cm(expected[0]), mm_to_cm(expected[1]), mm_to_cm(expected[2])
+                    )
+                    occurrence.transform = transform
+                    _capture_position_snapshot(root_comp)
+                    translation = occurrence.transform.translation
+                    current = (translation.x * 10.0, translation.y * 10.0, translation.z * 10.0)
+                summary["containerTransformMm"] = {
+                    "x": round(current[0], 2),
+                    "y": round(current[1], 2),
+                    "z": round(current[2], 2),
+                }
+        except Exception as ex:
+            summary["warnings"].append("Container placement read-back failed: {}".format(ex))
+    placement_debug["containerTransformFinalMm"] = summary.get("containerTransformMm")
+    placement_debug["createdBodies"] = summary.get("createdBodies")
+    placement_debug["warnings"] = list(summary.get("warnings") or [])[:10]
+    summary["placementDebug"] = {k: v for k, v in placement_debug.items() if k != "layoutRaw"}
+    _write_placement_debug(placement_debug)
     return summary
 
 
@@ -1649,20 +1882,32 @@ def _gt_create_front_panel_bodies(component, result, summary):
         if not bbox or bbox["x1"] <= bbox["x0"] or bbox["y1"] <= bbox["y0"] or bbox["z1"] <= bbox["z0"]:
             summary["skippedBoards"].append({"boardId": panel_id, "reason": "invalid_front_panel_bbox"})
             continue
+        # One front panel = one child component (assembly semantics); fall back
+        # to the container when children are unsupported (Part documents).
+        target = component
         try:
-            body, err = _add_box_body(component, panel_id, bbox, body_prefix="GT_FP", module_name="generalTall", move_prefix="GT_FP_MOVE_")
+            target = _new_child_component(
+                component,
+                "GT_FP_{}".format(sanitize_token(panel_id, fallback="FP", limit=60)),
+                module_name="generalTall",
+                board_id=panel_id,
+            )
+        except Exception:
+            target = component
+        try:
+            body, err = _add_box_body(target, panel_id, bbox, body_prefix="GT_FP", module_name="generalTall", move_prefix="GT_FP_MOVE_")
             if err or not body:
                 summary["skippedBoards"].append({"boardId": panel_id, "reason": err or "front_panel_create_failed"})
                 continue
             # Stage far away before cutting so hardware cuts can never touch structural boards.
             has_hardware = isinstance(panel.get("lockCutout"), dict) or (isinstance(panel.get("hingeHoles"), list) and panel.get("hingeHoles"))
             if has_hardware:
-                move_body_by_mm(component, body, GT_FP_STAGE_OFFSET_X_MM, 0.0, 0.0, feature_prefix="GT_FP_STAGE_")
+                move_body_by_mm(target, body, GT_FP_STAGE_OFFSET_X_MM, 0.0, 0.0, feature_prefix="GT_FP_STAGE_")
                 try:
-                    summary["frontPanelCutAudit"].extend(_gt_cut_fp_lock(component, body, panel, GT_FP_STAGE_OFFSET_X_MM))
-                    summary["frontPanelCutAudit"].extend(_gt_cut_fp_hinges(component, body, panel, GT_FP_STAGE_OFFSET_X_MM))
+                    summary["frontPanelCutAudit"].extend(_gt_cut_fp_lock(target, body, panel, GT_FP_STAGE_OFFSET_X_MM))
+                    summary["frontPanelCutAudit"].extend(_gt_cut_fp_hinges(target, body, panel, GT_FP_STAGE_OFFSET_X_MM))
                 finally:
-                    move_body_by_mm(component, body, -GT_FP_STAGE_OFFSET_X_MM, 0.0, 0.0, feature_prefix="GT_FP_UNSTAGE_")
+                    move_body_by_mm(target, body, -GT_FP_STAGE_OFFSET_X_MM, 0.0, 0.0, feature_prefix="GT_FP_UNSTAGE_")
             summary["createdBodies"] += 1
             summary["frontPanelsCreated"] += 1
             summary["createdBoardIds"].append(panel_id)
@@ -1680,7 +1925,7 @@ def _gt_create_front_panel_bodies(component, result, summary):
             summary["skippedBoards"].append({"boardId": panel_id, "reason": "front_panel_exception: {}".format(ex)})
 
 
-def create_rough_bodies_from_general_tall_result(fusion_adapter, result, run_label=None, avoidance_z_shift_mm=0.0):
+def create_rough_bodies_from_general_tall_result(fusion_adapter, result, run_label=None, avoidance_z_shift_mm=0.0, component_name=None, origin_x_mm=None, origin_y_mm=None):
     summary = create_rough_bodies_from_board_result(
         fusion_adapter,
         result,
@@ -1694,6 +1939,9 @@ def create_rough_bodies_from_general_tall_result(fusion_adapter, result, run_lab
         avoidance_z_shift_mm=avoidance_z_shift_mm,
         create_container_component=True,
         component_prefix="GT",
+        component_name=component_name,
+        origin_x_mm=origin_x_mm,
+        origin_y_mm=origin_y_mm,
     )
     summary.setdefault("frontPanelsCreated", 0)
     summary.setdefault("frontPanelCutAudit", [])

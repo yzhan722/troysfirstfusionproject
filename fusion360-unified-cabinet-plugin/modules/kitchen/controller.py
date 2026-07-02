@@ -4,6 +4,35 @@ import shutil
 import subprocess
 
 
+def _naming_args(payload, fusion=None):
+    """assemblyName / origin from a palette payload; origin falls back to the
+    generation-zone centre when not explicitly provided."""
+    data = payload if isinstance(payload, dict) else {}
+    name = data.get("assemblyName")
+    name = str(name).strip() if name else ""
+
+    origin_x = origin_y = 0.0
+    try:
+        import work_zones
+
+        root = fusion.get_root_component() if fusion is not None else None
+        origin_x, origin_y = work_zones.resolve_origin_from_payload(data, root)
+    except Exception:
+        def _num(key):
+            try:
+                return float(data.get(key) or 0.0)
+            except Exception:
+                return 0.0
+
+        origin_x, origin_y = _num("originXMm"), _num("originYMm")
+
+    return {
+        "component_name": name or None,
+        "origin_x_mm": origin_x,
+        "origin_y_mm": origin_y,
+    }
+
+
 def _candidate_node_paths():
     candidates = []
     env_node_exe = os.environ.get("NODE_EXE")
@@ -170,6 +199,7 @@ class KitchenController:
                 result,
                 run_label=run_label,
                 add_as_new=add_as_new,
+                **_naming_args(payload, self.fusion),
             )
             ok = len(created.get("errors") or []) == 0
             if ok and self.fusion:
@@ -238,7 +268,7 @@ class KitchenController:
             adapter_module = importlib.reload(kitchen_fusion_adapter)
             run_label = payload.get("caseName") if isinstance(payload, dict) else None
             add_as_new = payload.get("addAsNewCabinet") is not False if isinstance(payload, dict) else True
-            created = adapter_module.create_flat_panel_bodies_from_kitchen_result(self.fusion, result, run_label=run_label, add_as_new=add_as_new)
+            created = adapter_module.create_flat_panel_bodies_from_kitchen_result(self.fusion, result, run_label=run_label, add_as_new=add_as_new, **_naming_args(payload, self.fusion))
             ok = len(created.get("errors") or []) == 0
             if ok and self.fusion:
                 self.fusion.refresh_viewport()
@@ -307,7 +337,7 @@ class KitchenController:
             adapter_module = importlib.reload(kitchen_fusion_adapter)
             run_label = payload.get("caseName") if isinstance(payload, dict) else None
             add_as_new = payload.get("addAsNewCabinet") is not False if isinstance(payload, dict) else True
-            created = adapter_module.create_flat_transformed_panel_bodies_from_kitchen_result(self.fusion, result, run_label=run_label, add_as_new=add_as_new)
+            created = adapter_module.create_flat_transformed_panel_bodies_from_kitchen_result(self.fusion, result, run_label=run_label, add_as_new=add_as_new, **_naming_args(payload, self.fusion))
             ok = len(created.get("errors") or []) == 0
             if ok and self.fusion:
                 self.fusion.refresh_viewport()
@@ -332,6 +362,7 @@ class KitchenController:
                     "deletedPreviousKitchenArtifacts": created.get("deletedPreviousKitchenArtifacts", {}),
                     "addAsNewCabinet": created.get("addAsNewCabinet"),
                     "modelZOffset": created.get("modelZOffset"),
+                    "placementDebug": created.get("placementDebug"),
                 },
             )
         except Exception as ex:
@@ -363,7 +394,7 @@ class KitchenController:
             adapter_module = importlib.reload(kitchen_fusion_adapter)
             run_label = payload.get("caseName") if isinstance(payload, dict) else None
             add_as_new = payload.get("addAsNewCabinet") is not False if isinstance(payload, dict) else True
-            created = adapter_module.create_flat_panel_bodies_from_kitchen_result(self.fusion, result, run_label=run_label, add_as_new=add_as_new)
+            created = adapter_module.create_flat_panel_bodies_from_kitchen_result(self.fusion, result, run_label=run_label, add_as_new=add_as_new, **_naming_args(payload, self.fusion))
             ok = len(created.get("errors") or []) == 0
             if ok and self.fusion:
                 self.fusion.refresh_viewport()

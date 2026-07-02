@@ -68,6 +68,33 @@ class FridgeController:
             "pythonSteps": [],
             "pythonStartedAt": _iso_now(),
         }
+        assembly_name = payload.get("assemblyName") if isinstance(payload, dict) else None
+
+        origin_x_mm = origin_y_mm = 0.0
+        origin_active = False
+        try:
+            import work_zones
+
+            root = self.fusion.get_root_component() if self.fusion else None
+            origin_x_mm, origin_y_mm = work_zones.resolve_origin_from_payload(payload, root)
+            if isinstance(payload, dict):
+                origin_active = (
+                    payload.get("originXMm") is not None
+                    or payload.get("originYMm") is not None
+                    or (root is not None and work_zones.load_zone_layout(root) is not None)
+                )
+        except Exception:
+            if isinstance(payload, dict):
+                try:
+                    origin_x_mm = float(payload.get("originXMm") or 0.0)
+                except Exception:
+                    origin_x_mm = 0.0
+                try:
+                    origin_y_mm = float(payload.get("originYMm") or 0.0)
+                except Exception:
+                    origin_y_mm = 0.0
+                origin_active = payload.get("originXMm") is not None or payload.get("originYMm") is not None
+
         result = self._handle_generate_fridge_cabinet(
             pure_params,
             diagnostics,
@@ -75,6 +102,10 @@ class FridgeController:
             received_board_plan=payload.get("boardPlan") if isinstance(payload, dict) else None,
             received_v_verify=payload.get("vVerify") if isinstance(payload, dict) else None,
             preview_mode=payload.get("previewMode", "assembly_3d") if isinstance(payload, dict) else "assembly_3d",
+            assembly_name=(str(assembly_name).strip() or None) if assembly_name else None,
+            origin_x_mm=origin_x_mm,
+            origin_y_mm=origin_y_mm,
+            origin_active=origin_active,
         )
         return ("fridgeCabinetResult", result)
 
@@ -144,6 +175,10 @@ class FridgeController:
         received_board_plan=None,
         received_v_verify=None,
         preview_mode="assembly_3d",
+        assembly_name=None,
+        origin_x_mm=0.0,
+        origin_y_mm=0.0,
+        origin_active=False,
     ):
         if preview_mode not in ("flat_xy", "assembly_3d"):
             preview_mode = "assembly_3d"
@@ -242,13 +277,24 @@ class FridgeController:
 
         diagnostics["geometryStartedAt"] = _iso_now()
         try:
+            fusion_dir = os.path.join(self.plugin_dir, "fusion")
+            if fusion_dir not in sys.path:
+                sys.path.insert(0, fusion_dir)
             modules_dir = os.path.join(self.plugin_dir, "modules", "fridge")
             if modules_dir not in sys.path:
                 sys.path.insert(0, modules_dir)
+            import geometry_ops
             import flat_board_geometry
 
+            importlib.reload(geometry_ops)
             importlib.reload(flat_board_geometry)
-            geo = flat_board_geometry.generate_flat_board_bodies(board_plan, 100.0, preview_mode=preview_mode)
+            geo = flat_board_geometry.generate_flat_board_bodies(
+                board_plan, 100.0, preview_mode=preview_mode,
+                assembly_name=assembly_name,
+                origin_x_mm=origin_x_mm,
+                origin_y_mm=origin_y_mm,
+                origin_active=origin_active,
+            )
             result.update(
                 {
                     "geometryBuild": geo.get("geometryBuild"),
@@ -262,6 +308,9 @@ class FridgeController:
                     "assemblyBodyAudit": list(geo.get("assemblyBodyAudit") or []),
                     "flatPreviewRows": list(geo.get("flatPreviewRows") or []),
                     "assemblyGeometryOk": bool(geo.get("assemblyGeometryOk")) if preview_mode == "assembly_3d" else None,
+                    "originOffsetMm": geo.get("originOffsetMm"),
+                    "originAvoidance": geo.get("originAvoidance"),
+                    "spawnFootprintMm": geo.get("spawnFootprintMm"),
                 }
             )
             result["errors"].extend(geo.get("errors", []))

@@ -9,11 +9,13 @@ panel_body_resolver = importlib.reload(panel_body_resolver)
 
 import metadata_inspector
 import tag_metadata_editor
+import work_zones
 from panel_search_service import collect_all_tags, collect_defined_panels, resolve_panel_targets, search_panels
 
 
 metadata_inspector = importlib.reload(metadata_inspector)
 tag_metadata_editor = importlib.reload(tag_metadata_editor)
+work_zones = importlib.reload(work_zones)
 
 body_matches_record = panel_body_resolver.body_matches_record
 find_body_in_design = panel_body_resolver.find_body_in_design
@@ -415,7 +417,7 @@ class PanelAttributesController:
             "warnings": warnings[:20],
         }
 
-    def scan_metadata(self, _payload, _palette):
+    def scan_metadata(self, payload, _palette):
         root = self.fusion.get_root_component()
         if not root:
             return "panelAttributesResult", {
@@ -424,13 +426,15 @@ class PanelAttributesController:
                 "errors": ["No active Fusion design."],
             }
 
-        records, counts = metadata_inspector.scan_panel_metadata(root)
+        zone_filter = str((payload or {}).get("zoneFilter") or "").strip().lower() or None
+        records, counts = metadata_inspector.scan_panel_metadata(root, zone_filter=zone_filter)
         return "panelAttributesResult", {
             "ok": True,
             "action": "scanMetadata",
             "records": records,
             "counts": counts,
             "count": len(records),
+            "zoneFilter": zone_filter or "all",
         }
 
     def scan_selected_metadata(self, _payload, _palette):
@@ -466,54 +470,101 @@ class PanelAttributesController:
             "warnings": warnings,
         }
 
-    ASSEMBLY_ZONE_BODY_NAME = "AssemblyZone"
-    ASSEMBLY_ZONE_ATTR_GROUP = "UnifiedCabinet"
-    ASSEMBLY_ZONE_ATTR_NAME = "systemRole"
-    ASSEMBLY_ZONE_ATTR_VALUE = "assemblyZone"
-    ASSEMBLY_ZONE_OPACITY = 0.5
+    ZONE_OPACITY = 0.5
+    ZONE_SPECS = {
+        "assembly": {"bodyName": "AssemblyZone", "label": "Assembly Zone", "rgb": (45, 110, 225)},
+        "generation": {"bodyName": "GenerationZone", "label": "Generation Zone", "rgb": (60, 170, 90)},
+        "nesting": {"bodyName": "NestingZone", "label": "Nesting Zone", "rgb": (235, 150, 50)},
+    }
+    ZONE_SKETCH_NAMES = (
+        "AssemblyZoneSketch", "AssemblyZoneTextSketch",  # legacy single-zone names
+        "WorkZoneSketch_assembly", "WorkZoneSketch_generation", "WorkZoneSketch_nesting",
+        "WorkZoneText_assembly", "WorkZoneText_generation", "WorkZoneText_nesting",
+    )
 
-    def set_assembly_zone(self, payload, _palette):
+    def get_work_zones(self, _payload, _palette):
+        """Return the work-zone layout saved in the active design (if any)."""
+        root = self.fusion.get_root_component()
+        if not root:
+            return "panelAttributesResult", {
+                "ok": False,
+                "action": "getWorkZones",
+                "errors": ["No active Fusion design."],
+            }
+        layout = work_zones.load_zone_layout(root)
+        return "panelAttributesResult", {
+            "ok": True,
+            "action": "getWorkZones",
+            "found": bool(layout),
+            "layout": layout,
+        }
+
+    def set_work_zones(self, payload, _palette):
         app = adsk.core.Application.get()
         design = app.activeProduct if app else None
         root = self.fusion.get_root_component()
         if not root or design is None:
             return "panelAttributesResult", {
                 "ok": False,
-                "action": "setAssemblyZone",
+                "action": "setWorkZones",
                 "errors": ["No active Fusion design."],
             }
 
-        width_mm = max(float((payload or {}).get("widthMm") or 10000.0), 1.0)
-        depth_mm = max(float((payload or {}).get("depthMm") or 10000.0), 1.0)
+        data = payload or {}
+        width_mm = max(float(data.get("widthMm") or 10000.0), 1.0)
+        depth_mm = max(float(data.get("depthMm") or 10000.0), 1.0)
 
-        self._remove_existing_assembly_zone(root)
-
-        try:
-            half_w_cm = width_mm / 10.0 / 2.0
-            half_d_cm = depth_mm / 10.0 / 2.0
-            sketch = root.sketches.add(root.xYConstructionPlane)
-            sketch.name = "AssemblyZoneSketch"
-            point = adsk.core.Point3D
-            sketch.sketchCurves.sketchLines.addTwoPointRectangle(
-                point.create(-half_w_cm, -half_d_cm, 0.0),
-                point.create(half_w_cm, half_d_cm, 0.0),
-            )
-            profile = sketch.profiles.item(0)
-            # Zero-thickness surface patch (a real plane region, not a slab).
-            patches = root.features.patchFeatures
-            patch_input = patches.createInput(
-                profile, adsk.fusion.FeatureOperations.NewBodyFeatureOperation
-            )
-            patch = patches.add(patch_input)
-            body = patch.bodies.item(0)
-            body.name = self.ASSEMBLY_ZONE_BODY_NAME
-            self._mark_assembly_zone(body)
-            color_status = self._apply_assembly_zone_appearance(app, design, body)
+        def _optional_mm(key):
             try:
-                body.opacity = self.ASSEMBLY_ZONE_OPACITY
+                value = float(data.get(key) or 0.0)
+                return value if value > 0 else None
             except Exception:
-                pass
-            self._add_assembly_zone_text(root, half_w_cm, half_d_cm)
+                return None
+
+        generation_w = _optional_mm("generationWidthMm")
+        generation_d = _optional_mm("generationDepthMm")
+        nesting_w = _optional_mm("nestingWidthMm")
+        nesting_d = _optional_mm("nestingDepthMm")
+
+        # Without explicit nesting sizes, preserve a previously grown nesting
+        # zone; everything is repositioned around the new assembly size.
+        if nesting_w is None and nesting_d is None:
+            previous = work_zones.load_zone_layout(root) or {}
+            nesting_w, nesting_d = work_zones.rect_size(previous.get(work_zones.ZONE_NESTING))
+
+        layout = work_zones.compute_zone_layout(
+            width_mm, depth_mm, nesting_w, nesting_d,
+            generation_width_mm=generation_w, generation_depth_mm=generation_d,
+        )
+        if work_zones.zones_overlap(layout):
+            return "panelAttributesResult", {
+                "ok": False,
+                "action": "setWorkZones",
+                "errors": ["Zone layout would overlap; adjust sizes."],
+            }
+
+        self._remove_existing_work_zones(root)
+
+        colour_notes = []
+        try:
+            for zone_id in (work_zones.ZONE_ASSEMBLY, work_zones.ZONE_GENERATION, work_zones.ZONE_NESTING):
+                rect = layout[zone_id]
+                spec = self.ZONE_SPECS[zone_id]
+                body = self._create_zone_plane(root, zone_id, rect)
+                if body is None:
+                    colour_notes.append("{}: create failed".format(zone_id))
+                    continue
+                body.name = spec["bodyName"]
+                self._mark_zone_body(body, zone_id)
+                status = self._apply_zone_appearance(app, design, body, zone_id, spec["rgb"])
+                colour_notes.append("{}: {}".format(zone_id, status))
+                try:
+                    body.opacity = self.ZONE_OPACITY
+                except Exception:
+                    pass
+                self._add_zone_labels(root, zone_id, spec["label"], rect)
+
+            work_zones.save_zone_layout(root, layout)
             try:
                 viewport = app.activeViewport
                 if viewport:
@@ -524,55 +575,91 @@ class PanelAttributesController:
         except Exception as ex:
             return "panelAttributesResult", {
                 "ok": False,
-                "action": "setAssemblyZone",
-                "errors": ["Could not create assembly zone: {}".format(ex)],
+                "action": "setWorkZones",
+                "errors": ["Could not create work zones: {}".format(ex)],
             }
 
         return "panelAttributesResult", {
             "ok": True,
-            "action": "setAssemblyZone",
+            "action": "setWorkZones",
             "widthMm": round(width_mm, 1),
             "depthMm": round(depth_mm, 1),
-            "message": "Assembly zone set: {:.0f} × {:.0f} mm plane at z=0. Colour: {}.".format(
-                width_mm, depth_mm, color_status
+            "layout": layout,
+            "message": "Work zones set (assembly {:.0f}×{:.0f} mm; generation +X; nesting +Y; gap {:.0f} mm).".format(
+                width_mm, depth_mm, layout.get("gapMm", 0.0)
             ),
         }
 
-    def _mark_assembly_zone(self, body):
+    def _create_zone_plane(self, root, zone_id, rect):
+        try:
+            sketch = root.sketches.add(root.xYConstructionPlane)
+            sketch.name = "WorkZoneSketch_{}".format(zone_id)
+            point = adsk.core.Point3D
+            sketch.sketchCurves.sketchLines.addTwoPointRectangle(
+                point.create(rect["x0"] / 10.0, rect["y0"] / 10.0, 0.0),
+                point.create(rect["x1"] / 10.0, rect["y1"] / 10.0, 0.0),
+            )
+            profile = sketch.profiles.item(0)
+            # Zero-thickness surface patch (a plane region, not a slab).
+            patches = root.features.patchFeatures
+            patch_input = patches.createInput(
+                profile, adsk.fusion.FeatureOperations.NewBodyFeatureOperation
+            )
+            patch = patches.add(patch_input)
+            return patch.bodies.item(0)
+        except Exception:
+            return None
+
+    def _mark_zone_body(self, body, zone_id):
         try:
             body.attributes.add(
-                self.ASSEMBLY_ZONE_ATTR_GROUP,
-                self.ASSEMBLY_ZONE_ATTR_NAME,
-                self.ASSEMBLY_ZONE_ATTR_VALUE,
+                work_zones.WORK_ZONE_MARKER_GROUP,
+                work_zones.WORK_ZONE_MARKER_NAME,
+                work_zones.WORK_ZONE_MARKER_VALUE,
             )
+            body.attributes.add(work_zones.WORK_ZONE_MARKER_GROUP, "zoneId", str(zone_id))
         except Exception:
             pass
 
-    def _add_assembly_zone_text(self, root, half_w_cm, half_d_cm):
+    def _add_zone_labels(self, root, zone_id, label, rect):
+        try:
+            text_plane = self._work_zone_text_plane(root)
+            if text_plane is None:
+                return
+            sketch = root.sketches.add(text_plane)
+            sketch.name = "WorkZoneText_{}".format(zone_id)
+            texts = sketch.sketchTexts
+            w_cm = (rect["x1"] - rect["x0"]) / 10.0
+            d_cm = (rect["y1"] - rect["y0"]) / 10.0
+            cx = (rect["x0"] + rect["x1"]) / 2.0 / 10.0
+            height_cm = max(min(w_cm, d_cm) * 0.05, 0.5)
+            box_half_w = w_cm * 0.4
+            margin = height_cm * 1.5
+            for y_center in (rect["y0"] / 10.0 + margin, rect["y1"] / 10.0 - margin):
+                self._add_zone_text_box(texts, label, height_cm, box_half_w, y_center, cx)
+        except Exception:
+            pass
+
+    def _work_zone_text_plane(self, root):
         try:
             planes = root.constructionPlanes
+            for index in range(planes.count):
+                plane = planes.item(index)
+                if plane and plane.name == "WorkZoneTextPlane":
+                    return plane
             plane_input = planes.createInput()
-            # Sit the text 0.1 mm above the surface so it is not z-fighting.
+            # Sit the text 0.1 mm above the surfaces so it is not z-fighting.
             plane_input.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(0.01))
-            text_plane = planes.add(plane_input)
-            text_plane.name = "AssemblyZoneTextPlane"
-
-            sketch = root.sketches.add(text_plane)
-            sketch.name = "AssemblyZoneTextSketch"
-            texts = sketch.sketchTexts
-            height_cm = max(min(half_w_cm * 2.0, half_d_cm * 2.0) * 0.05, 0.5)
-            box_half_w = half_w_cm * 0.8
-            margin = height_cm * 1.5
-            # One label near each of the two opposite Y-edges.
-            for y_center in (-half_d_cm + margin, half_d_cm - margin):
-                self._add_zone_text_box(texts, "Assembly Zone", height_cm, box_half_w, y_center)
+            plane = planes.add(plane_input)
+            plane.name = "WorkZoneTextPlane"
+            return plane
         except Exception:
-            pass
+            return None
 
-    def _add_zone_text_box(self, texts, content, height_cm, box_half_w, y_center):
+    def _add_zone_text_box(self, texts, content, height_cm, box_half_w, y_center, cx=0.0):
         point = adsk.core.Point3D
-        corner = point.create(-box_half_w, y_center - height_cm / 2.0, 0.0)
-        diagonal = point.create(box_half_w, y_center + height_cm / 2.0, 0.0)
+        corner = point.create(cx - box_half_w, y_center - height_cm / 2.0, 0.0)
+        diagonal = point.create(cx + box_half_w, y_center + height_cm / 2.0, 0.0)
         try:
             text_input = texts.createInput2(content, height_cm)
             text_input.setAsMultiLine(
@@ -587,19 +674,20 @@ class PanelAttributesController:
             try:
                 text_input = texts.createInput(content, height_cm)
                 try:
-                    text_input.position = point.create(-box_half_w * 0.5, y_center, 0.0)
+                    text_input.position = point.create(cx - box_half_w * 0.5, y_center, 0.0)
                 except Exception:
                     pass
                 texts.add(text_input)
             except Exception:
                 pass
 
-    def _remove_existing_assembly_zone(self, root):
+    def _remove_existing_work_zones(self, root):
+        zone_body_names = {spec["bodyName"] for spec in self.ZONE_SPECS.values()}
         try:
             bodies = root.bRepBodies
             for index in range(bodies.count - 1, -1, -1):
                 body = bodies.item(index)
-                if body and body.name == self.ASSEMBLY_ZONE_BODY_NAME:
+                if body and body.name in zone_body_names:
                     body.deleteMe()
         except Exception:
             pass
@@ -607,7 +695,7 @@ class PanelAttributesController:
             sketches = root.sketches
             for index in range(sketches.count - 1, -1, -1):
                 sketch = sketches.item(index)
-                if sketch and sketch.name in ("AssemblyZoneSketch", "AssemblyZoneTextSketch"):
+                if sketch and sketch.name in self.ZONE_SKETCH_NAMES:
                     sketch.deleteMe()
         except Exception:
             pass
@@ -615,7 +703,7 @@ class PanelAttributesController:
             planes = root.constructionPlanes
             for index in range(planes.count - 1, -1, -1):
                 plane = planes.item(index)
-                if plane and plane.name == "AssemblyZoneTextPlane":
+                if plane and plane.name in ("AssemblyZoneTextPlane", "WorkZoneTextPlane"):
                     plane.deleteMe()
         except Exception:
             pass
@@ -681,10 +769,10 @@ class PanelAttributesController:
             pass
         return False
 
-    def _apply_assembly_zone_appearance(self, app, design, body):
+    def _apply_zone_appearance(self, app, design, body, zone_id, rgb):
         try:
             appearances = design.appearances
-            name = "UC Assembly Zone"
+            name = "UC Work Zone {}".format(zone_id)
             appearance = None
             try:
                 appearance = appearances.itemByName(name)
@@ -700,8 +788,8 @@ class PanelAttributesController:
                 appearance = appearances.addByCopy(base, name)
             if appearance is None:
                 return "could not create appearance"
-            colored = self._set_appearance_color(appearance, 45, 110, 225)
-            self._set_appearance_opacity(appearance, self.ASSEMBLY_ZONE_OPACITY)
+            colored = self._set_appearance_color(appearance, rgb[0], rgb[1], rgb[2])
+            self._set_appearance_opacity(appearance, self.ZONE_OPACITY)
             body.appearance = appearance
             return "applied '{}', colorSet={}".format(appearance.name, colored)
         except Exception as ex:

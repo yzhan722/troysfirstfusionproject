@@ -187,6 +187,24 @@ class OverheadController:
             )
 
         run_label = payload.get("caseName") if isinstance(payload, dict) else None
+        assembly_name = payload.get("assemblyName") if isinstance(payload, dict) else None
+        assembly_name = str(assembly_name).strip() if assembly_name else ""
+        origin_x_mm = origin_y_mm = 0.0
+        try:
+            import work_zones
+
+            root = self.fusion.get_root_component() if self.fusion else None
+            origin_x_mm, origin_y_mm = work_zones.resolve_origin_from_payload(payload, root)
+        except Exception:
+            if isinstance(payload, dict):
+                try:
+                    origin_x_mm = float(payload.get("originXMm") or 0.0)
+                except Exception:
+                    origin_x_mm = 0.0
+                try:
+                    origin_y_mm = float(payload.get("originYMm") or 0.0)
+                except Exception:
+                    origin_y_mm = 0.0
         adapter_module = importlib.reload(board_fusion_adapter)
         rough = adapter_module.create_rough_bodies_from_board_result(
             self.fusion,
@@ -200,7 +218,9 @@ class OverheadController:
             enable_zi_groove_cuts=False,
             enable_overhead_postprocess=True,
             create_container_component=True,
-            component_name="OHC",
+            component_name=assembly_name or "OHC",
+            origin_x_mm=origin_x_mm,
+            origin_y_mm=origin_y_mm,
         )
         ok = len(rough.get("errors") or []) == 0
         if ok and self.fusion:

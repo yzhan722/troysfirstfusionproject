@@ -200,10 +200,22 @@ def find_body_in_design(root_component, body_record):
     walk(root_component)
     if token_match:
         return token_match
+    # Nested-instance copies (nesting layout output) duplicate the original's
+    # panelId/name; write-backs must target the original whenever one exists.
+    non_nested = [body for body in named_matches if not _is_nested_instance(body)]
+    pool = non_nested or named_matches
     if panel_id:
-        for body in named_matches:
+        for body in pool:
             if read_body_panel_id(body) == panel_id:
                 return body
-    if len(named_matches) == 1:
-        return named_matches[0]
+    if len(pool) == 1:
+        return pool[0]
     return None
+
+
+def _is_nested_instance(body):
+    try:
+        attr = body.attributes.itemByName("UnifiedCabinet", "instanceRole")
+        return bool(attr and str(attr.value) == "nested")
+    except Exception:
+        return False

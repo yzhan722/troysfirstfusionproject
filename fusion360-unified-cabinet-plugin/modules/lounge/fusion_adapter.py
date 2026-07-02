@@ -49,27 +49,85 @@ def _delete_previous_lounge_artifacts(root_comp):
     return deleted
 
 
-def _new_lounge_component(root_comp, run_label, mode):
-    name = "LOUNGE_{}_{}".format(
-        sanitize_token(mode or "run", fallback="run", limit=24),
-        sanitize_token(run_label or int(time.time() * 1000), fallback="run", limit=60),
-    )
-    try:
-        transform = adsk.core.Matrix3D.create()
-        transform.translation = adsk.core.Vector3D.create(0, 0, mm_to_cm(MODEL_Z_OFFSET_MM))
-        occurrence = root_comp.occurrences.addNewComponent(transform)
-        occurrence.name = name
-        component = occurrence.component
-        component.name = name
+def _assign_component_name(occurrence, component, desired_name):
+    """Rename occurrence+component, auto-suffixing on duplicate-name errors.
+
+    Fusion component names are unique per design; assigning a duplicate RAISES.
+    Naming must never abort an already placed component.
+    """
+    base = sanitize_token(desired_name, fallback="assembly", limit=76)
+    candidates = [base] + ["{}_{}".format(base, index) for index in range(2, 100)]
+    for candidate in candidates:
         try:
-            component.attributes.add(ATTRIBUTE_GROUP, "module", "lounge")
-            component.attributes.add(ATTRIBUTE_GROUP, "previewMode", str(mode or "run"))
-            component.attributes.add(ATTRIBUTE_GROUP, "runLabel", str(run_label or ""))
+            component.name = candidate
+        except Exception:
+            continue
+        try:
+            occurrence.name = candidate
         except Exception:
             pass
-        return component, name, None
+        return candidate
+    try:
+        return str(component.name)
+    except Exception:
+        return base
+
+
+def _new_lounge_component(root_comp, run_label, mode, component_name=None, origin_x_mm=0.0, origin_y_mm=0.0):
+    if component_name:
+        name = sanitize_token(component_name, fallback="assembly", limit=80)
+    else:
+        name = "LOUNGE_{}_{}".format(
+            sanitize_token(mode or "run", fallback="run", limit=24),
+            sanitize_token(run_label or int(time.time() * 1000), fallback="run", limit=60),
+        )
+    try:
+        transform = adsk.core.Matrix3D.create()
+        transform.translation = adsk.core.Vector3D.create(
+            mm_to_cm(float(origin_x_mm or 0.0)),
+            mm_to_cm(float(origin_y_mm or 0.0)),
+            mm_to_cm(MODEL_Z_OFFSET_MM),
+        )
+        occurrence = root_comp.occurrences.addNewComponent(transform)
+        component = occurrence.component
     except Exception as ex:
         return root_comp, None, "Could not create Lounge Z-offset component; using root component: {}".format(ex)
+
+    _capture_position_snapshot(root_comp)
+    name = _assign_component_name(occurrence, component, name)
+    try:
+        component.attributes.add(ATTRIBUTE_GROUP, "module", "lounge")
+        component.attributes.add(ATTRIBUTE_GROUP, "previewMode", str(mode or "run"))
+        component.attributes.add(ATTRIBUTE_GROUP, "runLabel", str(run_label or ""))
+    except Exception:
+        pass
+    return component, name, None
+
+
+def _new_item_component(parent_component, item_id):
+    """One lounge panel/lid = one child component (assembly semantics)."""
+    transform = adsk.core.Matrix3D.create()
+    occurrence = parent_component.occurrences.addNewComponent(transform)
+    component = occurrence.component
+    _assign_component_name(
+        occurrence, component, "L_{}".format(sanitize_token(item_id, fallback="item", limit=60))
+    )
+    try:
+        component.attributes.add(ATTRIBUTE_GROUP, "module", "lounge")
+        component.attributes.add(ATTRIBUTE_GROUP, "boardId", str(item_id))
+    except Exception:
+        pass
+    return component
+
+
+def _item_component_or_fallback(container, root, item_id, warnings):
+    if container is root:
+        return container
+    try:
+        return _new_item_component(container, item_id)
+    except Exception as ex:
+        warnings.append("Could not create item component for {}: {}".format(item_id, ex))
+        return container
 
 
 def _add_box_body(component, body_id, x0, x1, y0, y1, z0, z1):
@@ -524,7 +582,41 @@ def _assembly_transform_for_item(item, staging_offset_x=0.0, staging_offset_y=0.
     return None
 
 
-def create_lounge_bodies(fusion_adapter, result, run_label=None):
+def _auto_origin(root, origin_x_mm, origin_y_mm):
+    """None = auto: use the generation-zone centre from the saved work zones.
+
+    Reads the saved layout attribute directly (no work_zones import) to stay
+    immune to Fusion's stale module cache.
+    """
+    if origin_x_mm is None and origin_y_mm is None:
+        try:
+            import json as _json
+
+            attr = root.attributes.itemByName("UnifiedCabinet", "workZoneLayout") if root else None
+            if attr and attr.value:
+                layout = _json.loads(attr.value)
+                rect = layout.get("generation") if isinstance(layout, dict) else None
+                if isinstance(rect, dict):
+                    return (
+                        (float(rect["x0"]) + float(rect["x1"])) / 2.0,
+                        (float(rect["y0"]) + float(rect["y1"])) / 2.0,
+                    )
+        except Exception:
+            pass
+    return float(origin_x_mm or 0.0), float(origin_y_mm or 0.0)
+
+
+def _capture_position_snapshot(root_comp):
+    """Snapshot occurrence positions so parametric recomputes keep them."""
+    try:
+        design = root_comp.parentDesign
+        if design and design.snapshots and design.snapshots.hasPendingSnapshot:
+            design.snapshots.add()
+    except Exception:
+        pass
+
+
+def create_lounge_bodies(fusion_adapter, result, run_label=None, component_name=None, origin_x_mm=None, origin_y_mm=None):
     summary = {
         "ok": True,
         "module": "lounge",
@@ -546,7 +638,11 @@ def create_lounge_bodies(fusion_adapter, result, run_label=None):
         summary["errors"].append("No active Fusion root component.")
         return summary
     summary["deletedPrevious"] = _delete_previous_lounge_artifacts(root)
-    component, component_name, component_warning = _new_lounge_component(root, summary["runLabel"], "flat")
+    origin_x_mm, origin_y_mm = _auto_origin(root, origin_x_mm, origin_y_mm)
+    component, component_name, component_warning = _new_lounge_component(
+        root, summary["runLabel"], "flat",
+        component_name=component_name, origin_x_mm=origin_x_mm, origin_y_mm=origin_y_mm,
+    )
     summary["assemblyComponentName"] = component_name
     if component_warning:
         summary["warnings"].append(component_warning)
@@ -564,11 +660,12 @@ def create_lounge_bodies(fusion_adapter, result, run_label=None):
             cursor_x = 0.0
             row_y += row_h + gap
             row_h = 0.0
-        body, err = _add_flat_panel_body(component, item, cursor_x, row_y)
+        item_component = _item_component_or_fallback(component, root, item.get("id"), summary["warnings"])
+        body, err = _add_flat_panel_body(item_component, item, cursor_x, row_y)
         if err:
             summary["skipped"].append({"id": item.get("id"), "reason": err})
             continue
-        summary["cutAudit"].extend(_apply_flat_panel_cuts(component, body, item, cursor_x, row_y))
+        summary["cutAudit"].extend(_apply_flat_panel_cuts(item_component, body, item, cursor_x, row_y))
         summary["createdBodies"] += 1
         summary["createdIds"].append(item.get("id"))
         cursor_x += width + gap
@@ -577,7 +674,7 @@ def create_lounge_bodies(fusion_adapter, result, run_label=None):
     return summary
 
 
-def create_lounge_assembly_bodies(fusion_adapter, result, run_label=None):
+def create_lounge_assembly_bodies(fusion_adapter, result, run_label=None, component_name=None, origin_x_mm=None, origin_y_mm=None):
     summary = {
         "ok": True,
         "module": "lounge",
@@ -600,7 +697,11 @@ def create_lounge_assembly_bodies(fusion_adapter, result, run_label=None):
         summary["errors"].append("No active Fusion root component.")
         return summary
     summary["deletedPrevious"] = _delete_previous_lounge_artifacts(root)
-    component, component_name, component_warning = _new_lounge_component(root, summary["runLabel"], "assembly")
+    origin_x_mm, origin_y_mm = _auto_origin(root, origin_x_mm, origin_y_mm)
+    component, component_name, component_warning = _new_lounge_component(
+        root, summary["runLabel"], "assembly",
+        component_name=component_name, origin_x_mm=origin_x_mm, origin_y_mm=origin_y_mm,
+    )
     summary["assemblyComponentName"] = component_name
     if component_warning:
         summary["warnings"].append(component_warning)
@@ -622,14 +723,15 @@ def create_lounge_assembly_bodies(fusion_adapter, result, run_label=None):
             row_h = 0.0
         stage_x = cursor_x
         stage_y = row_y
-        body, err = _add_flat_panel_body(component, item, stage_x, stage_y, preview_mode="assembly")
+        item_component = _item_component_or_fallback(component, root, item_id, summary["warnings"])
+        body, err = _add_flat_panel_body(item_component, item, stage_x, stage_y, preview_mode="assembly")
         if err:
             summary["skipped"].append({"id": item_id, "reason": err})
             cursor_x += width + gap
             row_h = max(row_h, depth)
             continue
-        summary["cutAudit"].extend(_apply_flat_panel_cuts(component, body, item, stage_x, stage_y))
-        staged.append({"item": item, "body": body, "offsetX": stage_x, "offsetY": stage_y})
+        summary["cutAudit"].extend(_apply_flat_panel_cuts(item_component, body, item, stage_x, stage_y))
+        staged.append({"item": item, "body": body, "offsetX": stage_x, "offsetY": stage_y, "component": item_component})
         cursor_x += width + gap
         row_h = max(row_h, depth)
 
@@ -642,7 +744,7 @@ def create_lounge_assembly_bodies(fusion_adapter, result, run_label=None):
             summary["skipped"].append({"id": item_id, "reason": "unsupported profilePlane {}".format(item.get("profilePlane"))})
             continue
         try:
-            _move_body_rigid_transform(component, body, transform, feature_prefix="LOUNGE_ASM_MOVE_")
+            _move_body_rigid_transform(staged_item.get("component") or component, body, transform, feature_prefix="LOUNGE_ASM_MOVE_")
             summary["transformAudit"].append({
                 "id": item_id,
                 "profilePlane": item.get("profilePlane"),

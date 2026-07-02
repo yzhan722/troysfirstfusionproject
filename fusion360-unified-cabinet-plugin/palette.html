@@ -1555,6 +1555,11 @@
         <button class="ghost" id="fridgeSavePresetBtn">Save Preset</button>
         <button class="ghost" id="fridgeLoadPresetBtn">Load Preset</button>
       </div>
+      <div class="actions" style="gap:8px;align-items:flex-end;">
+        <label style="font-size:12px;">Assembly Name <input type="text" id="fridgeAssemblyName" placeholder="auto" style="width:160px;"></label>
+        <label style="font-size:12px;">Origin X (mm) <input type="number" id="fridgeOriginX" placeholder="auto" step="100" style="width:110px;"></label>
+        <label style="font-size:12px;">Origin Y (mm) <input type="number" id="fridgeOriginY" placeholder="auto" step="100" style="width:110px;"></label>
+      </div>
 
       <div class="card">
         <h3>Fridge Cabinet</h3>
@@ -1582,6 +1587,11 @@
           <button class="ghost" id="gtCreateFusionBodiesBtn" disabled>Create Fusion Rough Bodies</button>
           <button class="ghost" id="gtSavePresetBtn">Save Preset</button>
           <button class="ghost" id="gtLoadPresetBtn">Load Preset</button>
+        </div>
+        <div class="actions" style="gap:8px;align-items:flex-end;">
+          <label style="font-size:12px;">Assembly Name <input type="text" id="gtAssemblyName" placeholder="auto (GT_案名)" style="width:160px;"></label>
+          <label style="font-size:12px;">Origin X (mm) <input type="number" id="gtOriginX" placeholder="auto" step="100" style="width:110px;"></label>
+          <label style="font-size:12px;">Origin Y (mm) <input type="number" id="gtOriginY" placeholder="auto" step="100" style="width:110px;"></label>
         </div>
         <div class="gt-blocker" id="gtGenerationBlocker" hidden></div>
 
@@ -1670,6 +1680,11 @@
           <button class="ghost" id="ohCreateFusionBodiesBtn" disabled>Create Fusion Bodies / 生成实体</button>
           <button class="ghost" id="ohSavePresetBtn">Save Preset / 保存预设</button>
           <button class="ghost" id="ohLoadPresetBtn">Load Preset / 加载预设</button>
+        </div>
+        <div class="oh-toolbar" style="gap:8px;align-items:flex-end;">
+          <label style="font-size:12px;">Assembly Name <input type="text" id="ohAssemblyName" placeholder="OHC" style="width:160px;"></label>
+          <label style="font-size:12px;">Origin X (mm) <input type="number" id="ohOriginX" placeholder="auto" step="100" style="width:110px;"></label>
+          <label style="font-size:12px;">Origin Y (mm) <input type="number" id="ohOriginY" placeholder="auto" step="100" style="width:110px;"></label>
         </div>
 
         <div class="card">
@@ -1762,6 +1777,9 @@
           <button class="ghost" id="kitchenCreateFlatTransformBtn">Assemble Bodies</button>
           <button class="ghost" id="kitchenSavePresetBtn">Save Preset</button>
           <button class="ghost" id="kitchenLoadPresetBtn">Load Preset</button>
+          <label style="font-size:12px;">Assembly Name <input type="text" id="kitchenAssemblyName" placeholder="auto" style="width:140px;"></label>
+          <label style="font-size:12px;">Origin X <input type="number" id="kitchenOriginX" placeholder="auto" step="100" style="width:90px;"></label>
+          <label style="font-size:12px;">Origin Y <input type="number" id="kitchenOriginY" placeholder="auto" step="100" style="width:90px;"></label>
           <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 auto;color:#6d7a8d;">
             <input id="kitchenAddAsNewCabinet" type="checkbox" checked style="width:auto;">
             Add as new cabinet
@@ -1865,6 +1883,11 @@
           <button class="ghost" id="loungeCreateAssemblyBodiesBtn">Create Assembly Bodies</button>
           <button class="ghost" id="loungeSavePresetBtn">Save Preset</button>
           <button class="ghost" id="loungeLoadPresetBtn">Load Preset</button>
+        </div>
+        <div class="actions" style="gap:8px;align-items:flex-end;">
+          <label style="font-size:12px;">Assembly Name <input type="text" id="loungeAssemblyName" placeholder="auto" style="width:160px;"></label>
+          <label style="font-size:12px;">Origin X (mm) <input type="number" id="loungeOriginX" placeholder="auto" step="100" style="width:110px;"></label>
+          <label style="font-size:12px;">Origin Y (mm) <input type="number" id="loungeOriginY" placeholder="auto" step="100" style="width:110px;"></label>
         </div>
         <div class="card">
           <h3 id="loungeTopViewTitle">L-Shape Lounge Top View</h3>
@@ -2156,6 +2179,14 @@
                 <div class="oh-stat">Later<strong>Edit</strong></div>
               </div>
               <div class="actions" style="margin-top:12px;margin-bottom:0;">
+                <label style="font-size:12px;display:inline-flex;align-items:center;gap:4px;">Scan zone
+                  <select id="attrScanZoneFilter">
+                    <option value="assembly" selected>Assembly (default)</option>
+                    <option value="all">All zones</option>
+                    <option value="generation">Generation</option>
+                    <option value="nesting">Nesting</option>
+                  </select>
+                </label>
                 <button type="button" class="primary" id="attrOverviewScanAllBtn">Scan All Metadata</button>
                 <button type="button" class="ghost" id="attrOverviewScanSelectedBtn">Scan Selected Bodies/Faces</button>
                 <button type="button" class="ghost" id="attrOverviewOpenPanelManagerBtn">Open Filter / Inspector</button>
@@ -2212,19 +2243,36 @@
           </div>
 
           <div class="card">
-            <h3>Assembly Zone / 装配区</h3>
+            <h3>Work Zones / 工作区</h3>
             <div class="card-body">
-              <div class="attr-section-note">Create a coloured reference platform on the XY plane (top at z=0) for assembling furniture. Default 10 m × 10 m, adjustable.</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
-                <label>Width X (mm)
+              <div class="attr-section-note">Three coloured planes at z=0: <strong>Assembly</strong> (blue, centre) · <strong>Generation</strong> (green, +X with 1 m gap) · <strong>Nesting</strong> (orange, +Y with 1 m gap). Each zone size is adjustable; positions always follow the assembly zone. Scans default to the Assembly zone.</div>
+              <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:8px 12px;align-items:end;margin-top:8px;">
+                <span style="font-size:12px;color:#1d4ed8;align-self:center;">Assembly 装配区</span>
+                <label style="font-size:12px;">Width X (mm)
                   <input type="number" id="attrAssemblyZoneWidth" value="10000" min="100" step="100" style="width:100%;">
                 </label>
-                <label>Depth Y (mm)
+                <label style="font-size:12px;">Depth Y (mm)
                   <input type="number" id="attrAssemblyZoneDepth" value="10000" min="100" step="100" style="width:100%;">
                 </label>
-                <button type="button" class="primary" id="attrSetAssemblyZoneBtn">Set Assembly Zone</button>
+                <span style="font-size:12px;color:#15803d;align-self:center;">Generation 生成区</span>
+                <label style="font-size:12px;">Width X (mm)
+                  <input type="number" id="attrGenZoneWidth" value="10000" min="100" step="100" style="width:100%;">
+                </label>
+                <label style="font-size:12px;">Depth Y (mm)
+                  <input type="number" id="attrGenZoneDepth" value="10000" min="100" step="100" style="width:100%;">
+                </label>
+                <span style="font-size:12px;color:#c2410c;align-self:center;">Nesting 排料区</span>
+                <label style="font-size:12px;">Width X (mm)
+                  <input type="number" id="attrNestZoneWidth" value="10000" min="100" step="100" style="width:100%;">
+                </label>
+                <label style="font-size:12px;">Depth Y (mm)
+                  <input type="number" id="attrNestZoneDepth" value="10000" min="100" step="100" style="width:100%;">
+                </label>
               </div>
-              <div id="attrAssemblyZoneSummary" class="message" style="margin-top:8px;">Creates/updates a coloured body named "AssemblyZone" at z=0.</div>
+              <div class="actions" style="margin-top:10px;">
+                <button type="button" class="primary" id="attrSetAssemblyZoneBtn">Set Work Zones</button>
+              </div>
+              <div id="attrAssemblyZoneSummary" class="message" style="margin-top:8px;">Creates/updates AssemblyZone, GenerationZone and NestingZone planes.</div>
             </div>
           </div>
         </div>
@@ -2633,6 +2681,11 @@
           <button class="ghost" id="aohCreateFusionBodiesBtn" disabled>Create Fusion Bodies / 生成实体</button>
           <button class="ghost" id="aohSavePresetBtn">Save Preset</button>
           <button class="ghost" id="aohLoadPresetBtn">Load Preset</button>
+        </div>
+        <div class="oh-toolbar" style="gap:8px;align-items:flex-end;">
+          <label style="font-size:12px;">Assembly Name <input type="text" id="aohAssemblyName" placeholder="OHC" style="width:160px;"></label>
+          <label style="font-size:12px;">Origin X (mm) <input type="number" id="aohOriginX" placeholder="auto" step="100" style="width:110px;"></label>
+          <label style="font-size:12px;">Origin Y (mm) <input type="number" id="aohOriginY" placeholder="auto" step="100" style="width:110px;"></label>
         </div>
 
         <div class="card">
@@ -3826,7 +3879,7 @@
       }
       const runLabel = `LOUNGE_FLAT_${new Date().toISOString().replace(/[:.]/g, "-")}`;
       document.getElementById("statusText").textContent = "Creating Lounge flat bodies...";
-      fusionSend("lounge.createFlatBodies", { result: loungeState.geometryResult, runLabel });
+      fusionSend("lounge.createFlatBodies", { result: loungeState.geometryResult, runLabel, ...generatorNamingPayload("lounge") });
     }
 
     function loungeCreateAssemblyBodies() {
@@ -3837,7 +3890,7 @@
       }
       const runLabel = `LOUNGE_ASSEMBLY_${new Date().toISOString().replace(/[:.]/g, "-")}`;
       document.getElementById("statusText").textContent = "Creating Lounge assembly bodies...";
-      fusionSend("lounge.createAssemblyBodies", { result: loungeState.geometryResult, runLabel });
+      fusionSend("lounge.createAssemblyBodies", { result: loungeState.geometryResult, runLabel, ...generatorNamingPayload("lounge") });
     }
 
     function renderLoungeUi() {
@@ -7939,6 +7992,7 @@
         caseName: runLabel,
         createGrooves: true,
         addAsNewCabinet: kitchenAddAsNewCabinet(),
+        ...generatorNamingPayload("kitchen"),
       });
     }
 
@@ -7962,6 +8016,7 @@
         result: kitchenState.geometryResult,
         caseName: runLabel,
         addAsNewCabinet: kitchenAddAsNewCabinet(),
+        ...generatorNamingPayload("kitchen"),
       });
     }
 
@@ -7980,6 +8035,7 @@
         result: kitchenState.geometryResult,
         caseName: runLabel,
         addAsNewCabinet: kitchenAddAsNewCabinet(),
+        ...generatorNamingPayload("kitchen"),
       });
     }
 
@@ -8065,6 +8121,7 @@
           result: ohState().result || undefined,
           params,
           caseName: runLabel,
+          ...generatorNamingPayload(ohId("")),
           clientBenchId: bench.benchId,
         });
       });
@@ -8090,6 +8147,7 @@
         result: generalTallState.result,
         params,
         caseName: runLabel,
+        ...generatorNamingPayload("gt"),
       });
     }
 
@@ -8183,6 +8241,32 @@
       fusionSend("fridge.validate", { params: data.pureParams, boardPlan: data.boardPlan, vVerify: data.vVerify });
     }
 
+    function renderFridgeGenerateResult(parsed) {
+      const resultBox = document.getElementById("resultBox");
+      if (resultBox) resultBox.textContent = JSON.stringify(parsed, null, 2);
+      const created = Number(parsed?.createdBodies || 0);
+      const errors = Array.isArray(parsed?.errors) ? parsed.errors : [];
+      const warnings = Array.isArray(parsed?.warnings) ? parsed.warnings : [];
+      const failed = parsed?.finalStatus === "fail";
+      const step = parsed?.failedStep || "";
+      const messages = [];
+      if (failed) {
+        errors.forEach((msg) => messages.push(`<div class="message error">Error: ${escapeHtml(msg)}</div>`));
+        warnings.forEach((msg) => messages.push(`<div class="message warn">Warning: ${escapeHtml(msg)}</div>`));
+      } else {
+        messages.push(`<div class="message ok">OK: Created ${created} Fusion bodies.</div>`);
+        warnings.forEach((msg) => messages.push(`<div class="message warn">Warning: ${escapeHtml(msg)}</div>`));
+      }
+      const validationHost = document.getElementById("validationMessages");
+      if (validationHost && messages.length) validationHost.innerHTML = messages.join("");
+      const status = document.getElementById("statusText");
+      if (status) {
+        status.textContent = failed
+          ? `Fridge generate failed (${step || "error"})`
+          : `Fridge created ${created} bodies`;
+      }
+    }
+
     function generate() {
       if (activeModule === "lounge") {
         loungeGenerateGeometry();
@@ -8200,16 +8284,55 @@
         kitchenGeneratePreview();
         return;
       }
-      const data = buildAll();
-      fusionSend("fridge.generate", {
-        type: "fridge.generate",
-        runId: String(Date.now()),
-        params: data.pureParams,
-        boardPlan: data.boardPlan,
-        vVerify: data.vVerify,
-        diagnosticsOnly: false,
-        previewMode: "assembly_3d",
-      });
+      try {
+        const data = buildAll();
+        document.getElementById("statusText").textContent = "Generating Fridge Fusion bodies...";
+        fusionSend("fridge.generate", {
+          type: "fridge.generate",
+          runId: String(Date.now()),
+          params: data.pureParams,
+          boardPlan: data.boardPlan,
+          vVerify: data.vVerify,
+          diagnosticsOnly: false,
+          previewMode: "assembly_3d",
+          ...generatorNamingPayload("fridge"),
+        });
+      } catch (error) {
+        const msg = error && error.message ? error.message : String(error);
+        document.getElementById("statusText").textContent = `Fridge generate failed: ${msg}`;
+        document.getElementById("resultBox").textContent = msg;
+        const validationHost = document.getElementById("validationMessages");
+        if (validationHost) {
+          validationHost.innerHTML = `<div class="message error">Error: ${escapeHtml(msg)}</div>`;
+        }
+      }
+    }
+
+    function maybeShowPartDocumentNotice(parsed) {
+      // Built-in reminder: Part documents cannot contain components, so
+      // generator placement falls back to direct body moves. Detect the Fusion
+      // error text in ANY python response and surface a persistent banner.
+      let text;
+      try { text = JSON.stringify(parsed); } catch (err) { return; }
+      if (!text || !/Part Design documents|Part document/i.test(text)) return;
+      let host = document.getElementById("ucPartDocNotice");
+      if (!host) {
+        host = document.createElement("div");
+        host.id = "ucPartDocNotice";
+        host.style.cssText = "position:sticky;top:0;z-index:9999;background:#fff3cd;border-bottom:2px solid #ffc107;color:#7a5c00;padding:10px 14px;font-size:13px;display:flex;gap:10px;align-items:center;";
+        const span = document.createElement("span");
+        span.style.flex = "1";
+        const close = document.createElement("button");
+        close.type = "button";
+        close.textContent = "×";
+        close.style.cssText = "border:1px solid #ccc;background:#fff;cursor:pointer;padding:2px 10px;";
+        close.addEventListener("click", () => host.remove());
+        host.appendChild(span);
+        host.appendChild(close);
+        document.body.prepend(host);
+      }
+      host.querySelector("span").textContent =
+        "⚠ 当前是 Part(零件)文档:Fusion 不允许在其中创建组件。实体已用整体移动方式落位;Assembly Name 与每板组件结构无效。要完整装配结构,请在 Design/Assembly 文档中使用本插件。";
     }
 
     window.fusionJavaScriptHandler = {
@@ -8217,6 +8340,7 @@
         document.getElementById("bridgeState").textContent = `Python bridge: ${action}`;
         try {
           const parsed = data ? JSON.parse(data) : {};
+          maybeShowPartDocumentNotice(parsed);
           if (action === "generalTallResult") {
             if (parsed.ok && parsed.result) {
               renderGeneralTallResult(parsed.result);
@@ -8349,6 +8473,8 @@
             hardwareHandleCreateHolesResult(parsed);
           } else if (action === "panelAttributesResult") {
             attrHandleFusionResult(parsed);
+          } else if (action === "fridgeCabinetResult") {
+            renderFridgeGenerateResult(parsed);
           } else {
             document.getElementById("resultBox").textContent = JSON.stringify(parsed, null, 2);
           }
@@ -8377,6 +8503,9 @@
             hardwareSetMessage("hwActionMessage", String(data || ""), "error");
           } else if (action === "hardwareCreateHolesResult") {
             hardwareSetMessage("hwActionMessage", String(data || ""), "error");
+          } else if (action === "fridgeCabinetResult") {
+            document.getElementById("resultBox").textContent = String(data || "");
+            document.getElementById("statusText").textContent = "Fridge generate response parse failed";
           } else {
             document.getElementById("resultBox").textContent = String(data || "");
           }
@@ -8987,7 +9116,7 @@
         if (attrFusionAvailable()) {
           panelAttrMock.applyTypedFilterAfterScan = true;
           attrShowFormMessage("No metadata scan loaded yet. Scanning first, then applying typed filters...", "warn");
-          fusionSend("panelAttributes.scanMetadata", {});
+          fusionSend("panelAttributes.scanMetadata", attrScanZonePayload());
           return;
         }
         attrScanMetadata(false);
@@ -9039,7 +9168,7 @@
         if (attrFusionAvailable()) {
           panelAttrMock.selectOverviewTagsAfterScan = true;
           attrShowFormMessage("No metadata scan loaded yet. Scanning first, then selecting panels...", "warn");
-          fusionSend("panelAttributes.scanMetadata", {});
+          fusionSend("panelAttributes.scanMetadata", attrScanZonePayload());
           return;
         }
         attrScanMetadata(false);
@@ -9073,22 +9202,95 @@
       );
     }
 
+    function attrScanZonePayload() {
+      const zoneFilter = document.getElementById("attrScanZoneFilter")?.value || "assembly";
+      return { zoneFilter };
+    }
+
+    function attrRequestWorkZones() {
+      if (!attrFusionAvailable()) return;
+      try {
+        fusionSend("panelAttributes.getWorkZones", {});
+      } catch (err) {
+        /* bridge not ready yet; page-switch calls will retry */
+      }
+    }
+
+    function generatorNamingPayload(prefix) {
+      const payload = {};
+      const name = (document.getElementById(prefix + "AssemblyName")?.value || "").trim();
+      if (name) payload.assemblyName = name;
+      // Empty origin inputs = "auto": omit the fields so the Python side places
+      // the assembly at the generation-zone centre from the saved layout.
+      const xRaw = String(document.getElementById(prefix + "OriginX")?.value ?? "").trim();
+      const yRaw = String(document.getElementById(prefix + "OriginY")?.value ?? "").trim();
+      if (xRaw !== "" && Number.isFinite(Number(xRaw))) payload.originXMm = Number(xRaw);
+      if (yRaw !== "" && Number.isFinite(Number(yRaw))) payload.originYMm = Number(yRaw);
+      return payload;
+    }
+
+    const GENERATOR_ORIGIN_PREFIXES = ["fridge", "gt", "oh", "aoh", "kitchen", "lounge"];
+
+    function attrApplyGenerationOriginToGenerators(layout) {
+      const rect = layout && layout.generation;
+      if (!rect) return;
+      const cx = Math.round((rect.x0 + rect.x1) / 2);
+      const cy = Math.round((rect.y0 + rect.y1) / 2);
+      for (const prefix of GENERATOR_ORIGIN_PREFIXES) {
+        const xInput = document.getElementById(prefix + "OriginX");
+        const yInput = document.getElementById(prefix + "OriginY");
+        if (xInput) xInput.value = cx;
+        if (yInput) yInput.value = cy;
+      }
+    }
+
     function attrSetAssemblyZone() {
       const summary = document.getElementById("attrAssemblyZoneSummary");
-      const widthMm = Math.max(100, Number(document.getElementById("attrAssemblyZoneWidth")?.value || 10000));
-      const depthMm = Math.max(100, Number(document.getElementById("attrAssemblyZoneDepth")?.value || 10000));
+      const num = (id, fallback) => Math.max(100, Number(document.getElementById(id)?.value || fallback));
+      const widthMm = num("attrAssemblyZoneWidth", 10000);
+      const depthMm = num("attrAssemblyZoneDepth", 10000);
+      const generationWidthMm = num("attrGenZoneWidth", 10000);
+      const generationDepthMm = num("attrGenZoneDepth", 10000);
+      const nestingWidthMm = num("attrNestZoneWidth", 10000);
+      const nestingDepthMm = num("attrNestZoneDepth", 10000);
       if (!attrFusionAvailable()) {
         if (summary) {
-          summary.textContent = "Fusion not available; open inside Fusion to create the assembly zone.";
+          summary.textContent = "Fusion not available; open inside Fusion to create the work zones.";
           summary.className = "message warn";
         }
         return;
       }
       if (summary) {
-        summary.textContent = `Creating assembly zone ${widthMm} × ${depthMm} mm at z=0...`;
+        summary.textContent = `Creating work zones (assembly ${widthMm} × ${depthMm} mm)...`;
         summary.className = "message";
       }
-      fusionSend("panelAttributes.setAssemblyZone", { widthMm, depthMm });
+      fusionSend("panelAttributes.setWorkZones", {
+        widthMm,
+        depthMm,
+        generationWidthMm,
+        generationDepthMm,
+        nestingWidthMm,
+        nestingDepthMm,
+      });
+    }
+
+    function attrSyncZoneInputsFromLayout(layout) {
+      if (!layout) return;
+      const setPair = (rect, widthId, depthId) => {
+        if (!rect) return;
+        const width = Math.round(rect.x1 - rect.x0);
+        const depth = Math.round(rect.y1 - rect.y0);
+        const widthInput = document.getElementById(widthId);
+        const depthInput = document.getElementById(depthId);
+        if (widthInput && width > 0) widthInput.value = width;
+        if (depthInput && depth > 0) depthInput.value = depth;
+      };
+      setPair(layout.assembly, "attrAssemblyZoneWidth", "attrAssemblyZoneDepth");
+      setPair(layout.generation, "attrGenZoneWidth", "attrGenZoneDepth");
+      setPair(layout.nesting, "attrNestZoneWidth", "attrNestZoneDepth");
+      // Auto-point every generator's origin at the generation-zone centre
+      // (manually adjustable afterwards).
+      attrApplyGenerationOriginToGenerators(layout);
     }
 
     function attrNestingNs() {
@@ -9312,8 +9514,9 @@
       const counts = payload.counts || {};
       const warnings = Array.isArray(payload.warnings) ? payload.warnings.filter(Boolean) : [];
       const label = payload.action === "scanSelectedMetadata" ? "Selected scan" : "Scanned";
+      const zoneNote = payload.zoneFilter && payload.zoneFilter !== "all" ? ` [zone: ${payload.zoneFilter}]` : "";
       attrShowFormMessage(
-        `${label} ${records.length} metadata record(s): ${counts.Valid || 0} valid, ${counts.Warning || 0} warning, ${counts.Invalid || 0} invalid, ${counts.Missing || 0} missing.${warnings.length ? ` ${warnings.join(" ")}` : ""}`,
+        `${label} ${records.length} metadata record(s)${zoneNote}: ${counts.Valid || 0} valid, ${counts.Warning || 0} warning, ${counts.Invalid || 0} invalid, ${counts.Missing || 0} missing.${warnings.length ? ` ${warnings.join(" ")}` : ""}`,
         (counts.Invalid || 0) ? "error" : (counts.Warning || 0) || (counts.Missing || 0) || warnings.length ? "warn" : "ok",
       );
       if (panelAttrMock.applyTypedFilterAfterScan) {
@@ -9335,7 +9538,7 @@
     function attrScanMetadata(selectedOnly = false) {
       if (attrFusionAvailable()) {
         attrShowFormMessage(selectedOnly ? "Scanning selected Fusion bodies/faces..." : "Scanning Fusion panel metadata...", "ok");
-        fusionSend(selectedOnly ? "panelAttributes.scanSelectedMetadata" : "panelAttributes.scanMetadata", {});
+        fusionSend(selectedOnly ? "panelAttributes.scanSelectedMetadata" : "panelAttributes.scanMetadata", selectedOnly ? {} : attrScanZonePayload());
         return;
       }
       const mockRecords = attrCurrentPanels().map((panel) => ({
@@ -9988,7 +10191,7 @@
             summary.textContent = "No metadata scan loaded yet. Scanning first, then selecting...";
             summary.className = "message warn";
           }
-          fusionSend("panelAttributes.scanMetadata", {});
+          fusionSend("panelAttributes.scanMetadata", attrScanZonePayload());
         } else if (summary) {
           summary.textContent = "Scan metadata first (Overview tab → Scan Metadata).";
           summary.className = "message warn";
@@ -10200,15 +10403,28 @@
         attrRenderTagScan(parsed);
         return;
       }
-      if (parsed.action === "setAssemblyZone") {
+      if (parsed.action === "getWorkZones") {
+        if (parsed.ok && parsed.found && parsed.layout) {
+          panelAttrMock.workZoneLayout = parsed.layout;
+          attrSyncZoneInputsFromLayout(parsed.layout);
+          const summary = document.getElementById("attrAssemblyZoneSummary");
+          if (summary) {
+            summary.textContent = "Loaded existing work zones from this design (zone sizes and generator origins synced).";
+            summary.className = "message ok";
+          }
+        }
+        return;
+      }
+      if (parsed.action === "setAssemblyZone" || parsed.action === "setWorkZones") {
         const summary = document.getElementById("attrAssemblyZoneSummary");
         const message = parsed.ok
-          ? (parsed.message || `Assembly zone set (${parsed.widthMm} × ${parsed.depthMm} mm).`)
-          : (parsed.errors || ["Failed to set assembly zone."]).join(" ");
+          ? (parsed.message || `Work zones set (assembly ${parsed.widthMm} × ${parsed.depthMm} mm).`)
+          : (parsed.errors || ["Failed to set work zones."]).join(" ");
         if (summary) {
           summary.textContent = message;
           summary.className = `message ${parsed.ok ? "ok" : "error"}`;
         }
+        if (parsed.ok) attrSyncZoneInputsFromLayout(parsed.layout);
         attrShowFormMessage(message, parsed.ok ? "ok" : "error");
         return;
       }
@@ -10694,6 +10910,10 @@
 
     hardwareInitUi();
     attrInitPanelAttributesUi();
+    // On palette startup, sync zone sizes + generator origins from any work
+    // zones already saved in the open design (delayed for bridge readiness).
+    setTimeout(attrRequestWorkZones, 800);
+    setTimeout(attrRequestWorkZones, 3000);
 
     document.getElementById("addDrawer").addEventListener("click", () => {
       const zone = { id: `zone_${Date.now()}`, type: "drawer", height: 250 };
@@ -10718,6 +10938,7 @@
         if (pageId === "attributes") {
           attrLoadFusionPanelList();
         }
+        attrRequestWorkZones();
       });
     });
     document.querySelectorAll("[data-module]").forEach((moduleButton) => {

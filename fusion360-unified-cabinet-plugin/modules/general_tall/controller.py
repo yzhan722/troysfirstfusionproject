@@ -7,6 +7,29 @@ import subprocess
 from modules.general_tall import fusion_adapter as general_tall_fusion_adapter
 
 
+def _payload_origin_mm(payload, fusion=None):
+    """Generator origin (X/Y mm): explicit payload values win; otherwise the
+    generation-zone centre from the saved work-zone layout."""
+    try:
+        import work_zones
+
+        root = fusion.get_root_component() if fusion is not None else None
+        return work_zones.resolve_origin_from_payload(payload, root)
+    except Exception:
+        pass
+    if not isinstance(payload, dict):
+        return 0.0, 0.0
+    try:
+        x = float(payload.get("originXMm") or 0.0)
+    except Exception:
+        x = 0.0
+    try:
+        y = float(payload.get("originYMm") or 0.0)
+    except Exception:
+        y = 0.0
+    return x, y
+
+
 def _node_resolution_debug(resolved_node_path, checked_paths):
     return {
         "nodeResolution": {
@@ -236,6 +259,8 @@ class GeneralTallController:
             )
 
         run_label = payload.get("caseName") if isinstance(payload, dict) else None
+        assembly_name = payload.get("assemblyName") if isinstance(payload, dict) else None
+        origin_x_mm, origin_y_mm = _payload_origin_mm(payload, self.fusion)
         params = payload.get("params") if isinstance(payload, dict) else None
         avoidance_z_shift_mm = 0.0
         if isinstance(params, dict):
@@ -253,6 +278,9 @@ class GeneralTallController:
             result,
             run_label=run_label,
             avoidance_z_shift_mm=avoidance_z_shift_mm,
+            component_name=(str(assembly_name).strip() or None) if assembly_name else None,
+            origin_x_mm=origin_x_mm,
+            origin_y_mm=origin_y_mm,
         )
         ok = len(rough.get("errors") or []) == 0
         if ok and self.fusion:

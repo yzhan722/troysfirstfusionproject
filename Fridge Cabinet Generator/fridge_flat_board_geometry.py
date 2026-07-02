@@ -20,7 +20,7 @@ import adsk.fusion
 
 ATTRIBUTE_GROUP = "FridgeCabinetGenerator"
 FEATURE_PREFIX = "FCG_V01_"
-GEOMETRY_BUILD = "flat-geometry-preview-017-front-panel-bodies"
+GEOMETRY_BUILD = "flat-geometry-preview-020-spawn-at-create"
 MODEL_Z_OFFSET_MM = 10000.0
 
 # Assembly 3D v0.3: T4/T5 + all HSet groups in board order; nothing skipped here (empty set).
@@ -34,26 +34,80 @@ COL_GAP_MM = 100.0
 PREVIEW_MODE = "flat_xy"
 
 
-def _new_model_z_component(root_comp: adsk.fusion.Component, preview_mode: str, run_suffix: int):
+def _new_model_z_component(
+    design_root_comp: adsk.fusion.Component,
+    preview_mode: str,
+    run_suffix: int,
+    assembly_origin_x_mm: float = 0.0,
+    assembly_origin_y_mm: float = 0.0,
+    assembly_origin_z_mm: float = None,
+):
+    # Placement is baked into addNewComponent (timeline-durable). Post-hoc
+    # occurrence.transform patches revert on the next feature recompute.
+    z_mm = MODEL_Z_OFFSET_MM if assembly_origin_z_mm is None else float(assembly_origin_z_mm)
     try:
         transform = adsk.core.Matrix3D.create()
-        transform.translation = adsk.core.Vector3D.create(0, 0, _mm_to_cm(MODEL_Z_OFFSET_MM))
-        occurrence = root_comp.occurrences.addNewComponent(transform)
-        occurrence.name = "{}MODELZ_{}_{}".format(
-            FEATURE_PREFIX,
-            str(preview_mode or "preview"),
-            int(run_suffix),
+        transform.translation = adsk.core.Vector3D.create(
+            _mm_to_cm(float(assembly_origin_x_mm or 0.0)),
+            _mm_to_cm(float(assembly_origin_y_mm or 0.0)),
+            _mm_to_cm(z_mm),
         )
+        occurrence = design_root_comp.occurrences.addNewComponent(transform)
         component = occurrence.component
-        component.name = occurrence.name
+    except Exception as ex:
+        return design_root_comp, None, "Could not create Fridge Z-offset component; using root component: {}".format(ex)
+    try:
+        design = design_root_comp.parentDesign
+        if design and design.snapshots and design.snapshots.hasPendingSnapshot:
+            design.snapshots.add()
+    except Exception:
+        pass
+    base = "{}MODELZ_{}_{}".format(FEATURE_PREFIX, str(preview_mode or "preview"), int(run_suffix))
+    resolved = None
+    for candidate in [base] + ["{}_{}".format(base, i) for i in range(2, 100)]:
+        try:
+            component.name = candidate
+            resolved = candidate
+            break
+        except Exception:
+            continue
+    warning = None
+    if resolved is None:
+        # Keep the auto-generated name; the wrapper still needs the real name
+        # to find the occurrence for the origin shift.
+        resolved = component.name
+        warning = "Fridge Z-offset component rename failed; keeping '{}'.".format(resolved)
+    try:
+        component.attributes.add(ATTRIBUTE_GROUP, "module", "fridge")
+        component.attributes.add(ATTRIBUTE_GROUP, "previewMode", str(preview_mode or "preview"))
+    except Exception:
+        pass
+    return component, resolved, warning
+
+
+def _new_board_child_component(parent_comp, board_id):
+    """One board = one child component (assembly semantics). Returns None when
+    components are unsupported (e.g. Part documents) so callers can fall back."""
+    try:
+        transform = adsk.core.Matrix3D.create()
+        occurrence = parent_comp.occurrences.addNewComponent(transform)
+        component = occurrence.component
+        cleaned = "".join(ch if (ch.isalnum() or ch in ("_", "-")) else "_" for ch in str(board_id or "board"))[:60] or "board"
+        base = "FRIDGE_{}".format(cleaned)
+        for candidate in [base] + ["{}_{}".format(base, i) for i in range(2, 100)]:
+            try:
+                component.name = candidate
+                break
+            except Exception:
+                continue
         try:
             component.attributes.add(ATTRIBUTE_GROUP, "module", "fridge")
-            component.attributes.add(ATTRIBUTE_GROUP, "previewMode", str(preview_mode or "preview"))
+            component.attributes.add(ATTRIBUTE_GROUP, "boardId", str(board_id))
         except Exception:
             pass
-        return component, occurrence.name, None
-    except Exception as ex:
-        return root_comp, None, "Could not create Fridge Z-offset component; using root component: {}".format(ex)
+        return component
+    except Exception:
+        return None
 
 # assembly_3d only: temporary manual rigid orientation for V stiles (pivot = board local origin at model (0,0,0)
 # after canonical flat_xy body). Order: rotate about local Y, then about local Z (world Z for 2nd move at origin).
@@ -1048,7 +1102,12 @@ def _origin_mm_from_assembly(asm):
         return None
 
 
-def _generate_assembly_3d_preview_bodies(board_plan: dict):
+def _generate_assembly_3d_preview_bodies(
+    board_plan: dict,
+    assembly_origin_x_mm: float = 0.0,
+    assembly_origin_y_mm: float = 0.0,
+    assembly_origin_z_mm: float = None,
+):
     """
     Cabinet-space preview (v0.1):
     1) Build each board as a canonical flat_xy solid at origin (Fusion +X=U, +Y=V, +Z=thickness).
@@ -1128,8 +1187,22 @@ def _generate_assembly_3d_preview_bodies(board_plan: dict):
                 )
 
         run_suffix = random.randint(100000, 9999999)
-        root_comp, component_name, component_warning = _new_model_z_component(root_comp, "assembly_3d", run_suffix)
-        report["modelZOffset"] = {"offsetMm": MODEL_Z_OFFSET_MM, "movedBodies": 0, "failedBodies": 0, "mode": "componentAtModelZ", "componentName": component_name}
+        design_root = root_comp
+        z_mm = MODEL_Z_OFFSET_MM if assembly_origin_z_mm is None else float(assembly_origin_z_mm)
+        root_comp, component_name, component_warning = _new_model_z_component(
+            design_root, "assembly_3d", run_suffix,
+            assembly_origin_x_mm=assembly_origin_x_mm,
+            assembly_origin_y_mm=assembly_origin_y_mm,
+            assembly_origin_z_mm=assembly_origin_z_mm,
+        )
+        report["modelZOffset"] = {
+            "offsetMm": z_mm,
+            "movedBodies": 0,
+            "failedBodies": 0,
+            "mode": "componentAtModelZ",
+            "componentName": component_name,
+            "placementOriginMm": [float(assembly_origin_x_mm or 0.0), float(assembly_origin_y_mm or 0.0), z_mm],
+        }
         if component_warning:
             report["warnings"].append(component_warning)
 
@@ -1190,7 +1263,13 @@ def _generate_assembly_3d_preview_bodies(board_plan: dict):
                 )
                 continue
 
-            body, _sketch, err = _create_canonical_xy_body_at_origin(root_comp, board, run_suffix)
+            # One board = one child component (falls back to the run component
+            # in documents that cannot contain components).
+            board_comp = _new_board_child_component(root_comp, bid)
+            if board_comp is None:
+                report["warnings"].append("{}: child component creation failed; body placed in run component.".format(bid))
+                board_comp = root_comp
+            body, _sketch, err = _create_canonical_xy_body_at_origin(board_comp, board, run_suffix)
             if not body:
                 reason = err or "create_failed"
                 report["skippedBoards"].append({"id": bid, "reason": reason})
@@ -1211,7 +1290,7 @@ def _generate_assembly_3d_preview_bodies(board_plan: dict):
                 continue
 
             try:
-                report["frontPanelCutAudit"].extend(_cut_front_panel_hardware_canonical(root_comp, body, board, run_suffix))
+                report["frontPanelCutAudit"].extend(_cut_front_panel_hardware_canonical(board_comp, body, board, run_suffix))
             except Exception as ex:
                 report["warnings"].append("{}: front panel hardware cuts failed: {}".format(bid, ex))
 
@@ -1227,10 +1306,10 @@ def _generate_assembly_3d_preview_bodies(board_plan: dict):
             try:
                 v_man = _assembly_v_manual_config(bid)
                 if v_man is not None:
-                    _apply_assembly_manual_v_orientation(root_comp, body, v_man)
+                    _apply_assembly_manual_v_orientation(board_comp, body, v_man)
                     if z_flip:
-                        _apply_assembly_flip_world_z_180_about_bbox_center(root_comp, body)
-                    _move_body_min_corner_to(root_comp, body, ox, oy, oz)
+                        _apply_assembly_flip_world_z_180_about_bbox_center(board_comp, body)
+                    _move_body_min_corner_to(board_comp, body, ox, oy, oz)
                     audit_origin = {"x": float(ox), "y": float(oy), "z": float(oz)}
                     rd = v_man.get("rotateDeg") if isinstance(v_man.get("rotateDeg"), dict) else {}
                     tm = v_man.get("translateMm") if isinstance(v_man.get("translateMm"), dict) else {}
@@ -1254,9 +1333,9 @@ def _generate_assembly_3d_preview_bodies(board_plan: dict):
                 else:
                     if orient_pp != "XY":
                         orient_mtx = _orientation_matrix_for_profile_plane(orient_pp)
-                        _move_body_rigid_transform(root_comp, body, orient_mtx)
+                        _move_body_rigid_transform(board_comp, body, orient_mtx)
                     if bid == "SidePanel":
-                        _apply_side_panel_assembly_world_rotations(root_comp, body)
+                        _apply_side_panel_assembly_world_rotations(board_comp, body)
                         manual_extra = {
                             "manualTransformApplied": True,
                             "sidePanelAssemblyWorldDeg": [
@@ -1268,7 +1347,7 @@ def _generate_assembly_3d_preview_bodies(board_plan: dict):
                             "pivotMode": "world_origin_after_profile_plane_orient",
                         }
                     elif re.match(r"^HSet_.+_H(?:13|24)$", bid):
-                        _apply_h13_h24_assembly_world_rotations(root_comp, body)
+                        _apply_h13_h24_assembly_world_rotations(board_comp, body)
                         manual_extra = {
                             "manualTransformApplied": True,
                             "h13h24AssemblyWorldDeg": [
@@ -1278,8 +1357,8 @@ def _generate_assembly_3d_preview_bodies(board_plan: dict):
                             "pivotMode": "world_origin_after_profile_plane_orient",
                         }
                     if z_flip:
-                        _apply_assembly_flip_world_z_180_about_bbox_center(root_comp, body)
-                    _move_body_min_corner_to(root_comp, body, ox, oy, oz)
+                        _apply_assembly_flip_world_z_180_about_bbox_center(board_comp, body)
+                    _move_body_min_corner_to(board_comp, body, ox, oy, oz)
                     if z_flip:
                         manual_extra = {
                             "manualTransformApplied": False,
@@ -1335,7 +1414,96 @@ def _generate_assembly_3d_preview_bodies(board_plan: dict):
         report["assemblyGeometryOk"] = _compute_assembly_geometry_ok_flag(report)
 
 
-def generate_flat_board_bodies(board_plan: dict, spacing_mm: float = 100.0, preview_mode=None):
+def _simulate_flat_xy_layout_footprint_mm(boards):
+    """XY extent of the flat_xy preview layout (assembly-local mm)."""
+    row_max_height = {name: 0.0 for name in FLAT_PREVIEW_ROW_ORDER}
+    row_has_boards = {name: False for name in FLAT_PREVIEW_ROW_ORDER}
+    for board in boards:
+        if not isinstance(board, dict) or not _outer_vector_valid(board):
+            continue
+        rn = _flat_preview_row_name(board.get("series"))
+        row_has_boards[rn] = True
+        bb = _outer_vector_bbox_mm(board)
+        if bb:
+            row_max_height[rn] = max(row_max_height[rn], float(bb["heightV"]))
+    row_y0 = {name: 0.0 for name in FLAT_PREVIEW_ROW_ORDER}
+    y_acc = 0.0
+    for rn in FLAT_PREVIEW_ROW_ORDER:
+        if not row_has_boards[rn]:
+            continue
+        row_y0[rn] = y_acc
+        h = float(row_max_height.get(rn, 0.0) or 0.0)
+        gap = max(ROW_GAP_MM, h + ROW_GAP_PAD_MM)
+        y_acc += h + gap
+    row_cursor_x = {name: 0.0 for name in FLAT_PREVIEW_ROW_ORDER}
+    max_x = 0.0
+    max_y = 0.0
+    for board in boards:
+        if not isinstance(board, dict) or not _outer_vector_valid(board):
+            continue
+        row_name = _flat_preview_row_name(board.get("series"))
+        x_off = float(row_cursor_x[row_name])
+        y_off = float(row_y0[row_name])
+        ov_bbox = _outer_vector_bbox_mm(board)
+        if not isinstance(ov_bbox, dict):
+            continue
+        wu = float(ov_bbox.get("widthU", 0) or 0.0)
+        hv = float(ov_bbox.get("heightV", 0) or 0.0)
+        if wu <= 1e-6:
+            continue
+        max_x = max(max_x, x_off + wu)
+        max_y = max(max_y, y_off + hv)
+        row_cursor_x[row_name] = x_off + wu + COL_GAP_MM
+    if max_x <= 1e-6 and max_y <= 1e-6:
+        return None
+    return (0.0, max_x, 0.0, max_y)
+
+
+def compute_spawn_footprint_mm(board_plan: dict, preview_mode=None):
+    """XY footprint (min_x, max_x, min_y, max_y) in assembly-local mm for spawn avoidance."""
+    if not isinstance(board_plan, dict):
+        return None
+    boards = _boards_with_front_panels(board_plan)
+    if not isinstance(boards, list) or not boards:
+        return None
+    pm = preview_mode if preview_mode is not None else PREVIEW_MODE
+    if pm == "assembly_3d":
+        x0s, x1s, y0s, y1s = [], [], [], []
+        for board in boards:
+            if not isinstance(board, dict) or not _outer_vector_valid(board):
+                continue
+            ov_bbox = _outer_vector_bbox_mm(board)
+            if not isinstance(ov_bbox, dict):
+                continue
+            placement = board.get("placement") or {}
+            asm = placement.get("assembly") if isinstance(placement.get("assembly"), dict) else {}
+            om = asm.get("originMm") if isinstance(asm.get("originMm"), dict) else {}
+            try:
+                ox = float(om.get("x", 0))
+                oy = float(om.get("y", 0))
+            except (TypeError, ValueError):
+                continue
+            bid = str(board.get("id") or "")
+            orient_pp = "XZ" if bid == "T5" else str(board.get("profilePlane") or "XY")
+            sizes = _expected_global_sizes_mm(orient_pp, ov_bbox, _board_thickness_mm(board))
+            x0s.append(ox)
+            x1s.append(ox + float(sizes.get("sizeX", 0) or 0.0))
+            y0s.append(oy)
+            y1s.append(oy + float(sizes.get("sizeY", 0) or 0.0))
+        if not x0s:
+            return None
+        return (min(x0s), max(x1s), min(y0s), max(y1s))
+    return _simulate_flat_xy_layout_footprint_mm(boards)
+
+
+def generate_flat_board_bodies(
+    board_plan: dict,
+    spacing_mm: float = 100.0,
+    preview_mode=None,
+    assembly_origin_x_mm: float = 0.0,
+    assembly_origin_y_mm: float = 0.0,
+    assembly_origin_z_mm: float = None,
+):
     """
     For each board in boardPlan['boards'] with a valid outerVector, sketch + extrude + lay out
     in preview rows by series (B / V / Zi / H / T / Other).
@@ -1351,7 +1519,12 @@ def generate_flat_board_bodies(board_plan: dict, spacing_mm: float = 100.0, prev
     if pm not in ("flat_xy", "assembly_3d"):
         pm = "flat_xy"
     if pm == "assembly_3d":
-        return _generate_assembly_3d_preview_bodies(board_plan)
+        return _generate_assembly_3d_preview_bodies(
+            board_plan,
+            assembly_origin_x_mm=assembly_origin_x_mm,
+            assembly_origin_y_mm=assembly_origin_y_mm,
+            assembly_origin_z_mm=assembly_origin_z_mm,
+        )
 
     report = {
         "createdBodies": 0,
@@ -1402,8 +1575,22 @@ def generate_flat_board_bodies(board_plan: dict, spacing_mm: float = 100.0, prev
     report["frontPanelCount"] = len(board_plan.get("frontPanels") or [])
 
     run_suffix = random.randint(100000, 9999999)
-    root_comp, component_name, component_warning = _new_model_z_component(root_comp, "flat_xy", run_suffix)
-    report["modelZOffset"] = {"offsetMm": MODEL_Z_OFFSET_MM, "movedBodies": 0, "failedBodies": 0, "mode": "componentAtModelZ", "componentName": component_name}
+    design_root = root_comp
+    z_mm = MODEL_Z_OFFSET_MM if assembly_origin_z_mm is None else float(assembly_origin_z_mm)
+    root_comp, component_name, component_warning = _new_model_z_component(
+        design_root, "flat_xy", run_suffix,
+        assembly_origin_x_mm=assembly_origin_x_mm,
+        assembly_origin_y_mm=assembly_origin_y_mm,
+        assembly_origin_z_mm=assembly_origin_z_mm,
+    )
+    report["modelZOffset"] = {
+        "offsetMm": z_mm,
+        "movedBodies": 0,
+        "failedBodies": 0,
+        "mode": "componentAtModelZ",
+        "componentName": component_name,
+        "placementOriginMm": [float(assembly_origin_x_mm or 0.0), float(assembly_origin_y_mm or 0.0), z_mm],
+    }
     if component_warning:
         report["warnings"].append(component_warning)
 
@@ -1455,8 +1642,14 @@ def generate_flat_board_bodies(board_plan: dict, spacing_mm: float = 100.0, prev
 
         ov_bbox = _outer_vector_bbox_mm(board)
 
+        # One board = one child component (falls back to the run component in
+        # documents that cannot contain components).
+        board_comp = _new_board_child_component(root_comp, bid_str)
+        if board_comp is None:
+            report["warnings"].append("{}: child component creation failed; body placed in run component.".format(bid_str))
+            board_comp = root_comp
         sketch, err = create_sketch_from_outer_vector(
-            root_comp,
+            board_comp,
             board,
             (0.0, 0.0, 0.0),
             run_suffix,
@@ -1468,7 +1661,7 @@ def generate_flat_board_bodies(board_plan: dict, spacing_mm: float = 100.0, prev
             report["skippedBoards"].append({"id": bid, "reason": err or "sketch_failed"})
             report["skippedBoardIds"].append(bid_str)
             continue
-        body, _feat = extrude_board_profile(root_comp, board, sketch, run_suffix)
+        body, _feat = extrude_board_profile(board_comp, board, sketch, run_suffix)
         if not body:
             report["skippedBoards"].append({"id": bid, "reason": "extrude_failed"})
             report["skippedBoardIds"].append(bid_str)
@@ -1479,12 +1672,12 @@ def generate_flat_board_bodies(board_plan: dict, spacing_mm: float = 100.0, prev
             continue
 
         try:
-            report["frontPanelCutAudit"].extend(_cut_front_panel_hardware_canonical(root_comp, body, board, run_suffix))
+            report["frontPanelCutAudit"].extend(_cut_front_panel_hardware_canonical(board_comp, body, board, run_suffix))
         except Exception as ex:
             report["warnings"].append("{}: front panel hardware cuts failed: {}".format(bid, ex))
 
         try:
-            _move_body_min_corner_to(root_comp, body, x_off, y_off, z_off)
+            _move_body_min_corner_to(board_comp, body, x_off, y_off, z_off)
             wu = float(ov_bbox.get("widthU", 0) or 0.0) if isinstance(ov_bbox, dict) else 0.0
             if wu <= 1e-6:
                 mn = _body_min_mm(body)
