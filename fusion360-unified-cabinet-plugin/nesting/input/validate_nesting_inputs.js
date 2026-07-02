@@ -1,3 +1,4 @@
+(function () {
 "use strict";
 
 /**
@@ -59,3 +60,4 @@ if (typeof globalThis !== "undefined") {
     validateNestingInputs: api,
   });
 }
+})();

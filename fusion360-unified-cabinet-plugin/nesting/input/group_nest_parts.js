@@ -1,3 +1,4 @@
+(function () {
 "use strict";
 
 /**
@@ -58,3 +59,4 @@ if (typeof globalThis !== "undefined") {
     groupNestParts: api,
   });
 }
+})();

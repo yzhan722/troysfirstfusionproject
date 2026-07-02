@@ -1,3 +1,4 @@
+(function () {
 "use strict";
 
 /**
@@ -33,3 +34,4 @@ if (typeof globalThis !== "undefined") {
     deriveAllowedRotations: api,
   });
 }
+})();

@@ -1,3 +1,4 @@
+(function () {
 "use strict";
 
 /**
@@ -8,10 +9,12 @@
  *   → NestingInputJob { groups, invalidPanels, summary }
  */
 
+const IS_CJS = typeof module !== "undefined" && !!module.exports && typeof require === "function";
+
 let panelModule;
 let groupModule;
 let validate;
-if (typeof require === "function") {
+if (IS_CJS) {
   panelModule = require("./panel_to_nest_part.js");
   groupModule = require("./group_nest_parts.js");
   validate = require("./validate_nesting_inputs.js");
@@ -92,3 +95,4 @@ if (typeof globalThis !== "undefined") {
     buildNestingInputJob: api,
   });
 }
+})();

@@ -1,3 +1,4 @@
+(function () {
 "use strict";
 
 /**
@@ -11,10 +12,12 @@
  * stored inside the metadata JSON itself.
  */
 
+const IS_CJS = typeof module !== "undefined" && !!module.exports && typeof require === "function";
+
 let outlineModule;
 let rotationsModule;
 let validate;
-if (typeof require === "function") {
+if (IS_CJS) {
   outlineModule = require("./outline_records_to_polygon.js");
   rotationsModule = require("./derive_allowed_rotations.js");
   validate = require("./validate_nesting_inputs.js");
@@ -244,3 +247,4 @@ if (typeof globalThis !== "undefined") {
     panelToNestPart: api,
   });
 }
+})();

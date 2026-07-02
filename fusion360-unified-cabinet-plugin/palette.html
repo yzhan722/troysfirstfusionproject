@@ -9101,7 +9101,11 @@
       const runBtn = document.getElementById("attrNestRunBtn");
       const ns = attrNestingNs();
       if (!ns.buildNestingInputJob) {
-        if (summary) { summary.textContent = "Nesting modules failed to load."; summary.className = "message error"; }
+        if (summary) {
+          const loaded = Object.keys(ns).join(", ") || "none";
+          summary.textContent = `Nesting modules failed to load (loaded: ${loaded}).`;
+          summary.className = "message error";
+        }
         return;
       }
       const records = panelAttrMock.metadataScanRecords || [];

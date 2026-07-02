@@ -1,3 +1,4 @@
+(function () {
 "use strict";
 
 /**
@@ -5,8 +6,10 @@
  * Pure functions, no state.
  */
 
+const IS_CJS = typeof module !== "undefined" && !!module.exports && typeof require === "function";
+
 let polygonBasic;
-if (typeof require === "function") {
+if (IS_CJS) {
   polygonBasic = require("./polygon_basic.js");
 } else {
   polygonBasic = (globalThis.CabinetNesting || {}).polygonBasic;
@@ -112,3 +115,4 @@ if (typeof globalThis !== "undefined") {
     intersections: api,
   });
 }
+})();

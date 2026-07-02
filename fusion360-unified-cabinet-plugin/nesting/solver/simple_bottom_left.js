@@ -1,3 +1,4 @@
+(function () {
 "use strict";
 
 /**
@@ -10,10 +11,12 @@
  * with the NFP solver.
  */
 
+const IS_CJS = typeof module !== "undefined" && !!module.exports && typeof require === "function";
+
 let polygonBasic;
 let polygonTransform;
 let intersections;
-if (typeof require === "function") {
+if (IS_CJS) {
   polygonBasic = require("../geometry/polygon_basic.js");
   polygonTransform = require("../geometry/polygon_transform.js");
   intersections = require("../geometry/intersections.js");
@@ -231,3 +234,4 @@ if (typeof globalThis !== "undefined") {
     simpleBottomLeft: api,
   });
 }
+})();

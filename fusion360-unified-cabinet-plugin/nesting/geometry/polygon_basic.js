@@ -1,3 +1,4 @@
+(function () {
 "use strict";
 
 /**
@@ -43,3 +44,4 @@ if (typeof globalThis !== "undefined") {
     polygonBasic: api,
   });
 }
+})();

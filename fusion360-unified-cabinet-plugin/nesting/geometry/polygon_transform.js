@@ -1,3 +1,4 @@
+(function () {
 "use strict";
 
 /**
@@ -49,3 +50,4 @@ if (typeof globalThis !== "undefined") {
     polygonTransform: api,
   });
 }
+})();

@@ -1,3 +1,4 @@
+(function () {
 "use strict";
 
 /**
@@ -112,3 +113,4 @@ if (typeof globalThis !== "undefined") {
     types: api,
   });
 }
+})();

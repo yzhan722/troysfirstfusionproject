@@ -1,3 +1,4 @@
+(function () {
 "use strict";
 
 /**
@@ -7,7 +8,11 @@
  * display-space (origin-shifted + Y-flipped) and must never be used here.
  */
 
-const polygonBasic = (typeof require === "function")
+// Only treat the environment as CommonJS when module.exports really exists —
+// some embedded webviews expose a global `require` that must not be used.
+const IS_CJS = typeof module !== "undefined" && !!module.exports && typeof require === "function";
+
+const polygonBasic = IS_CJS
   ? require("../geometry/polygon_basic.js")
   : (globalThis.CabinetNesting || {}).polygonBasic;
 
@@ -92,3 +97,4 @@ if (typeof globalThis !== "undefined") {
     outlineRecordsToPolygon: api,
   });
 }
+})();
