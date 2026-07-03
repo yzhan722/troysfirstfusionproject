@@ -42,6 +42,11 @@ class RelationshipReportTests(unittest.TestCase):
             "panelBId",
             "geometryType",
             "relationshipType",
+            "detectionMethod",
+            "verificationLevel",
+            "safeForPreview",
+            "safeForCut",
+            "requiresManualConfirmation",
             "axis",
             "distanceMm",
             "overlapX",
@@ -54,6 +59,11 @@ class RelationshipReportTests(unittest.TestCase):
             "errors",
         ):
             self.assertIn(key, row)
+        self.assertEqual(row["detectionMethod"], "bbox_aabb")
+        self.assertEqual(row["verificationLevel"], "bbox_candidate")
+        self.assertTrue(row["safeForPreview"])
+        self.assertFalse(row["safeForCut"])
+        self.assertTrue(row["requiresManualConfirmation"])
 
     def test_build_scan_report(self):
         panel_a = PanelSnapshot(

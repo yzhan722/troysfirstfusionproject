@@ -14,7 +14,9 @@ from relationship_fixtures import build_fixture_snapshots, expected_fixture_case
 from relationship_geometry import classify_pair  # noqa: E402
 from screw_hole_from_relationship import (  # noqa: E402
     CREATE_ACTION,
+    CUT_BLOCKED_MESSAGE,
     PREVIEW_ACTION,
+    build_cut_feature_metadata,
     build_cut_success_report,
     hole_count_from_contact_length,
     plan_screw_hole_cut_from_relationship,
@@ -44,6 +46,9 @@ class HardwareFromRelationshipTests(unittest.TestCase):
             panel_snapshots=snapshots,
         )
         self.assertTrue(report["ok"], report)
+        self.assertEqual(report["audit"]["verificationLevel"], "bbox_candidate")
+        self.assertTrue(report["audit"]["safeForPreview"])
+        self.assertFalse(report["audit"]["safeForCut"])
         self.assertEqual(len(report["features"]), 1)
         feature = report["features"][0]
         self.assertEqual(feature["type"], "screw_hole")
@@ -124,8 +129,21 @@ class HardwareFromRelationshipTests(unittest.TestCase):
             self.assertTrue(report["ok"], report)
             self.assertGreaterEqual(report["holeCount"], 1)
 
-    def test_cut_plan_valid_edge_to_surface_passes(self):
+    def test_cut_plan_bbox_candidate_is_blocked(self):
         rel, snapshots = _fixture_edge_to_surface()
+        plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=snapshots)
+        self.assertFalse(plan["ok"])
+        self.assertEqual(plan["action"], CREATE_ACTION)
+        self.assertTrue(any(CUT_BLOCKED_MESSAGE in err for err in plan["errors"]))
+
+    def test_cut_plan_allowed_when_verification_marks_cut_safe(self):
+        rel, snapshots = _fixture_edge_to_surface()
+        rel["verification"] = {
+            "level": "cut_approved",
+            "safeForPreview": True,
+            "safeForCut": True,
+            "requiresManualConfirmation": False,
+        }
         plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=snapshots)
         self.assertTrue(plan["ok"], plan)
         self.assertEqual(plan["action"], CREATE_ACTION)
@@ -136,6 +154,12 @@ class HardwareFromRelationshipTests(unittest.TestCase):
         rel, snapshots = _fixture_edge_to_surface()
         rel["geometryType"] = "surface_to_surface"
         rel["relationshipType"] = "face_contact"
+        rel["verification"] = {
+            "level": "cut_approved",
+            "safeForPreview": True,
+            "safeForCut": True,
+            "requiresManualConfirmation": False,
+        }
         plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=snapshots)
         self.assertFalse(plan["ok"])
         self.assertEqual(plan["action"], CREATE_ACTION)
@@ -144,6 +168,12 @@ class HardwareFromRelationshipTests(unittest.TestCase):
     def test_cut_plan_missing_host_panel_id_returns_error(self):
         rel, snapshots = _fixture_edge_to_surface()
         rel["roles"] = {"hostPanelId": None, "targetPanelId": rel["roles"]["targetPanelId"]}
+        rel["verification"] = {
+            "level": "cut_approved",
+            "safeForPreview": True,
+            "safeForCut": True,
+            "requiresManualConfirmation": False,
+        }
         plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=snapshots)
         self.assertFalse(plan["ok"])
         self.assertTrue(any("hostPanelId" in err for err in plan["errors"]))
@@ -151,15 +181,26 @@ class HardwareFromRelationshipTests(unittest.TestCase):
     def test_cut_plan_missing_target_panel_id_returns_error(self):
         rel, snapshots = _fixture_edge_to_surface()
         rel["roles"] = {"hostPanelId": rel["roles"]["hostPanelId"], "targetPanelId": None}
+        rel["verification"] = {
+            "level": "cut_approved",
+            "safeForPreview": True,
+            "safeForCut": True,
+            "requiresManualConfirmation": False,
+        }
         plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=snapshots)
         self.assertFalse(plan["ok"])
         self.assertTrue(any("targetPanelId" in err for err in plan["errors"]))
 
     def test_cut_feature_metadata_payload_is_stable(self):
         rel, snapshots = _fixture_edge_to_surface()
-        plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=snapshots)
-        self.assertTrue(plan["ok"], plan)
-        metadata = plan["metadata"]
+        preview = preview_screw_holes_from_relationship(rel, panel_snapshots=snapshots)
+        self.assertTrue(preview["ok"], preview)
+        metadata = build_cut_feature_metadata(
+            preview["features"][0],
+            relationship_id=preview["relationshipId"],
+            host_panel_id=preview["hostPanelId"],
+            target_panel_id=preview["targetPanelId"],
+        )
         self.assertEqual(
             set(metadata.keys()),
             {
@@ -182,15 +223,22 @@ class HardwareFromRelationshipTests(unittest.TestCase):
 
     def test_cut_success_report_payload_is_stable(self):
         rel, snapshots = _fixture_edge_to_surface()
-        plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=snapshots)
+        preview = preview_screw_holes_from_relationship(rel, panel_snapshots=snapshots)
+        self.assertTrue(preview["ok"], preview)
+        metadata = build_cut_feature_metadata(
+            preview["features"][0],
+            relationship_id=preview["relationshipId"],
+            host_panel_id=preview["hostPanelId"],
+            target_panel_id=preview["targetPanelId"],
+        )
         report = build_cut_success_report(
-            relationship_id=plan["relationshipId"],
-            host_panel_id=plan["hostPanelId"],
-            target_panel_id=plan["targetPanelId"],
+            relationship_id=preview["relationshipId"],
+            host_panel_id=preview["hostPanelId"],
+            target_panel_id=preview["targetPanelId"],
             host_body_name="HOST_BODY",
             target_body_name="TARGET_BODY",
             cut_feature_name="HW_REL_SCREW_HOLE_TEST",
-            metadata=plan["metadata"],
+            metadata=metadata,
             metadata_written=True,
         )
         self.assertTrue(report["ok"])
@@ -210,9 +258,9 @@ class HardwareFromRelationshipTests(unittest.TestCase):
         self.assertNotIn("metadataWritten", preview)
 
         plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=snapshots)
-        self.assertTrue(plan["ok"], plan)
+        self.assertFalse(plan["ok"], plan)
         self.assertEqual(plan["action"], CREATE_ACTION)
-        self.assertIn("preview", plan)
+        self.assertTrue(any(CUT_BLOCKED_MESSAGE in err for err in plan["errors"]))
 
         preview_again = preview_screw_holes_from_relationship(rel, panel_snapshots=snapshots)
         self.assertEqual(preview_again, preview)

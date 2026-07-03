@@ -8,6 +8,7 @@ from relationship_models import BoardRelationship, PanelSnapshot
 
 
 def relationship_audit_row(relationship: BoardRelationship) -> Dict[str, Any]:
+    verification = relationship.verification.to_dict()
     return {
         "relationshipId": relationship.relationshipId,
         "panelAId": relationship.panelA.panelId,
@@ -16,6 +17,11 @@ def relationship_audit_row(relationship: BoardRelationship) -> Dict[str, Any]:
         "panelBBodyName": relationship.panelB.bodyName,
         "geometryType": relationship.geometryType,
         "relationshipType": relationship.relationshipType,
+        "detectionMethod": relationship.detectionMethod,
+        "verificationLevel": verification["level"],
+        "safeForPreview": verification["safeForPreview"],
+        "safeForCut": verification["safeForCut"],
+        "requiresManualConfirmation": verification["requiresManualConfirmation"],
         "axis": relationship.contact.axis,
         "distanceMm": relationship.contact.distanceMm,
         "overlapX": relationship.contact.overlapX,

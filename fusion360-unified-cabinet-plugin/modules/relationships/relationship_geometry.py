@@ -9,11 +9,13 @@ from relationship_models import (
     BoardRelationship,
     BBoxMm,
     ContactMetrics,
+    DETECTION_METHOD_BBOX_AABB,
     PanelRef,
     PanelSnapshot,
     RelationshipRoles,
     RelationshipSource,
     RelationshipValidation,
+    bbox_candidate_verification,
     make_relationship_id,
 )
 
@@ -398,6 +400,8 @@ def classify_pair(
             ruleId=rule_id,
         ),
         validation=validation,
+        verification=bbox_candidate_verification(),
+        detectionMethod=DETECTION_METHOD_BBOX_AABB,
         auditNotes=audit_notes,
     )
     return relationship

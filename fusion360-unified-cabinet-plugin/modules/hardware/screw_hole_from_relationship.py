@@ -18,6 +18,42 @@ CREATE_ACTION = "hardware.createScrewHolesFromRelationship"
 PREVIEW_ACTION = "hardware.previewScrewHolesFromRelationship"
 ACCEPTED_GEOMETRY_TYPE = "edge_to_surface"
 ACCEPTED_RELATIONSHIP_TYPE = "structural_butt_joint"
+CUT_BLOCKED_MESSAGE = (
+    "Relationship is bbox_candidate only. Face verification or manual confirmation is required before cut."
+)
+
+
+def resolve_relationship_verification(relationship: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        from relationship_models import verification_from_dict
+
+        return verification_from_dict(
+            relationship.get("verification") if isinstance(relationship, dict) else None
+        ).to_dict()
+    except Exception:
+        raw = (relationship or {}).get("verification") if isinstance(relationship, dict) else {}
+        if not isinstance(raw, dict):
+            raw = {}
+        return {
+            "level": str(raw.get("level") or "bbox_candidate"),
+            "safeForPreview": bool(raw.get("safeForPreview", True)),
+            "safeForCut": bool(raw.get("safeForCut", False)),
+            "requiresManualConfirmation": bool(raw.get("requiresManualConfirmation", True)),
+        }
+
+
+def assert_safe_for_preview(relationship: Dict[str, Any]) -> Optional[str]:
+    verification = resolve_relationship_verification(relationship)
+    if not verification.get("safeForPreview"):
+        return "Relationship verification does not allow hardware preview."
+    return None
+
+
+def assert_safe_for_cut(relationship: Dict[str, Any]) -> Optional[str]:
+    verification = resolve_relationship_verification(relationship)
+    if not verification.get("safeForCut"):
+        return CUT_BLOCKED_MESSAGE
+    return None
 
 
 def hole_count_from_contact_length(contact_length_mm: float) -> int:
@@ -163,6 +199,10 @@ def preview_screw_holes_from_relationship(
     if not isinstance(relationship, dict):
         return _error_report("Relationship payload must be an object.", errors=["Missing relationship object."])
 
+    preview_gate_error = assert_safe_for_preview(relationship)
+    if preview_gate_error:
+        return _error_report("Relationship is not verified for preview.", errors=[preview_gate_error])
+
     geometry_type = str(relationship.get("geometryType") or "")
     relationship_type = str(relationship.get("relationshipType") or "")
     if geometry_type != ACCEPTED_GEOMETRY_TYPE or relationship_type != ACCEPTED_RELATIONSHIP_TYPE:
@@ -241,6 +281,8 @@ def preview_screw_holes_from_relationship(
         return _error_report("Failed to derive contact patch from panel snapshots.", errors=[str(ex)])
 
     relationship_id = str(relationship.get("relationshipId") or "relationship.unknown")
+    verification = resolve_relationship_verification(relationship)
+    detection_method = str(relationship.get("detectionMethod") or "bbox_aabb")
     feature = HardwareFeatureIntent(
         schemaVersion=HARDWARE_SCHEMA_VERSION,
         featureId="{}::screw_hole".format(relationship_id),
@@ -277,6 +319,12 @@ def preview_screw_holes_from_relationship(
             "depthMode": depth_mode,
             "depthMm": round(depth_mm, 4),
             "positions": feature.geometry.to_dict()["positions"],
+            "detectionMethod": detection_method,
+            "verification": verification,
+            "verificationLevel": verification.get("level"),
+            "safeForPreview": verification.get("safeForPreview"),
+            "safeForCut": verification.get("safeForCut"),
+            "requiresManualConfirmation": verification.get("requiresManualConfirmation"),
             "warnings": warnings,
             "errors": errors,
         },
@@ -328,6 +376,13 @@ def plan_screw_hole_cut_from_relationship(
     rule: Optional[Dict[str, Any]] = None,
     panel_snapshots: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
+    cut_gate_error = assert_safe_for_cut(relationship)
+    if cut_gate_error:
+        return _create_error_report(
+            "Relationship is not verified for cut.",
+            errors=[cut_gate_error],
+        )
+
     preview = preview_screw_holes_from_relationship(
         relationship,
         rule=rule,

@@ -39,6 +39,20 @@ class RelationshipClassificationTests(unittest.TestCase):
         self.assertEqual(rel.relationshipType, "structural_butt_joint")
         self.assertEqual(rel.roles.hostPanelId, "REL_SURFACE_B")
         self.assertEqual(rel.roles.targetPanelId, "REL_EDGE_A")
+        self.assertEqual(rel.detectionMethod, "bbox_aabb")
+        self.assertEqual(rel.verification.level, "bbox_candidate")
+        self.assertTrue(rel.verification.safeForPreview)
+        self.assertFalse(rel.verification.safeForCut)
+        self.assertTrue(rel.verification.requiresManualConfirmation)
+
+    def test_all_classified_relationships_are_bbox_candidates(self):
+        panels = {panel.panelId: panel for panel in build_fixture_snapshots()}
+        for fixture in expected_fixture_cases():
+            rel = classify_pair(panels[fixture["panelAId"]], panels[fixture["panelBId"]])
+            self.assertEqual(rel.detectionMethod, "bbox_aabb")
+            self.assertEqual(rel.verification.level, "bbox_candidate")
+            self.assertTrue(rel.verification.safeForPreview)
+            self.assertFalse(rel.verification.safeForCut)
 
     def test_surface_to_surface_classification(self):
         z = 12000.0

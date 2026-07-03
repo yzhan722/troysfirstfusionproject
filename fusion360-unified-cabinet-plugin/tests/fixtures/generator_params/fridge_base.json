@@ -1,0 +1,30 @@
+{
+  "ui": {
+    "cabinet": {
+      "width": 611,
+      "depth": 616,
+      "height": 2100,
+      "panelThickness": 15,
+      "exteriorSide": "right"
+    },
+    "fridge": {
+      "width": 550,
+      "depth": 580,
+      "height": 1500
+    },
+    "clearances": {
+      "top": 40,
+      "bottom": 53
+    },
+    "wheelAvoidance": {
+      "enabled": true,
+      "height": 200,
+      "depth": 300
+    },
+    "stack": [
+      { "id": "flap", "type": "flap", "height": 195 },
+      { "id": "drawer", "type": "drawer", "height": 250 },
+      { "id": "fridge", "type": "fridge", "height": 1500 }
+    ]
+  }
+}

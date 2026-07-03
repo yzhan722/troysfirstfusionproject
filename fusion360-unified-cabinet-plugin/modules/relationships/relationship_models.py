@@ -33,6 +33,15 @@ SOURCE_METHODS = (
     "generator_declared",
 )
 
+VERIFICATION_LEVELS = (
+    "bbox_candidate",
+    "face_verified",
+    "generator_declared",
+    "cut_approved",
+)
+
+DETECTION_METHOD_BBOX_AABB = "bbox_aabb"
+
 
 @dataclass
 class BBoxMm:
@@ -179,6 +188,45 @@ class RelationshipValidation:
 
 
 @dataclass
+class RelationshipVerification:
+    level: str = "bbox_candidate"
+    safeForPreview: bool = True
+    safeForCut: bool = False
+    requiresManualConfirmation: bool = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "level": self.level,
+            "safeForPreview": bool(self.safeForPreview),
+            "safeForCut": bool(self.safeForCut),
+            "requiresManualConfirmation": bool(self.requiresManualConfirmation),
+        }
+
+
+def bbox_candidate_verification() -> RelationshipVerification:
+    return RelationshipVerification(
+        level="bbox_candidate",
+        safeForPreview=True,
+        safeForCut=False,
+        requiresManualConfirmation=True,
+    )
+
+
+def verification_from_dict(data: Optional[Dict[str, Any]]) -> RelationshipVerification:
+    if not isinstance(data, dict):
+        return bbox_candidate_verification()
+    level = str(data.get("level") or "bbox_candidate")
+    return RelationshipVerification(
+        level=level,
+        safeForPreview=bool(data.get("safeForPreview", level == "bbox_candidate")),
+        safeForCut=bool(data.get("safeForCut", False)),
+        requiresManualConfirmation=bool(
+            data.get("requiresManualConfirmation", level == "bbox_candidate")
+        ),
+    )
+
+
+@dataclass
 class BoardRelationship:
     schemaVersion: int
     relationshipId: str
@@ -190,6 +238,8 @@ class BoardRelationship:
     roles: RelationshipRoles
     source: RelationshipSource
     validation: RelationshipValidation
+    verification: RelationshipVerification = field(default_factory=bbox_candidate_verification)
+    detectionMethod: str = DETECTION_METHOD_BBOX_AABB
     auditNotes: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -204,6 +254,8 @@ class BoardRelationship:
             "roles": self.roles.to_dict(),
             "source": self.source.to_dict(),
             "validation": self.validation.to_dict(),
+            "verification": self.verification.to_dict(),
+            "detectionMethod": self.detectionMethod,
             "auditNotes": list(self.auditNotes),
         }
 

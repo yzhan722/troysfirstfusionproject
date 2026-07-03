@@ -33,6 +33,14 @@ def main() -> int:
     if code != 0:
         failures.append("relationship_regression")
 
+    code = run(
+        [sys.executable, str(ROOT / "tests" / "run_generator_relationship_regression.py")],
+        cwd=ROOT,
+        label="generator relationship regression",
+    )
+    if code != 0:
+        failures.append("generator_relationship_regression")
+
     for script in (
         "run_fridge_bridge_tests.js",
         "run_general_tall_bridge_tests.js",
@@ -57,6 +65,7 @@ def main() -> int:
             "tests.test_relationship_classification",
             "tests.test_relationship_report",
             "tests.test_hardware_from_relationship",
+            "tests.test_generator_relationships",
             "-v",
         ],
         cwd=ROOT,

@@ -31,6 +31,11 @@ REQUIRED_AUDIT_KEYS = {
     "panelBBodyName",
     "geometryType",
     "relationshipType",
+    "detectionMethod",
+    "verificationLevel",
+    "safeForPreview",
+    "safeForCut",
+    "requiresManualConfirmation",
     "axis",
     "distanceMm",
     "overlapX",
@@ -54,6 +59,8 @@ REQUIRED_RELATIONSHIP_KEYS = {
     "roles",
     "source",
     "validation",
+    "verification",
+    "detectionMethod",
 }
 
 
