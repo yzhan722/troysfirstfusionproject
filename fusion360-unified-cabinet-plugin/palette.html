@@ -2184,9 +2184,19 @@
               <button type="button" class="ghost" id="hwRelCreateFixtureBtn">Create Relationship Fixture</button>
               <button type="button" class="ghost" id="hwRelScanBtn">Scan Relationships</button>
               <button type="button" class="ghost" id="hwRelInspectSelectedBtn">Inspect Selected Pair</button>
+              <button type="button" class="primary" id="hwRelVerifySelectedFacesBtn">Verify Face Contact For Selected Pair</button>
+              <button type="button" class="primary" id="hwRelReconcileOverheadDeclarationsBtn">Reconcile Overhead Declarations</button>
               <button type="button" class="primary" id="hwRelPreviewScrewHolesBtn">Preview Screw Holes From First Valid Relationship</button>
               <button type="button" class="ghost" id="hwRelConfirmForCutBtn">Confirm First Valid Relationship For Cut</button>
               <button type="button" class="primary" id="hwRelCreateCutFromConfirmedBtn">Create Screw Holes From Confirmed Relationship</button>
+              <button type="button" class="primary" id="hwRelRunDemoFixtureFlowBtn">Run Demo Fixture Flow</button>
+              <button type="button" class="ghost" id="hwRelRunDemoPackOfflineBtn">Run Demo Pack Offline</button>
+              <button type="button" class="ghost" id="hwRelRunDemoNegativeBtn">Run Demo Negative Report</button>
+              <button type="button" class="ghost" id="hwRelCopyLastJsonBtn">Copy Last JSON Report</button>
+              <button type="button" class="ghost" id="hwRelShowDemoSummaryBtn">Show Demo Summary</button>
+              <button type="button" class="primary" id="hwRelShowOverlayForSelectedBtn">Show Overlay For Selected Pair</button>
+              <button type="button" class="ghost" id="hwRelRunOverlaySelfCheckBtn">Run Overlay Self-Check</button>
+              <button type="button" class="ghost" id="hwRelClearRelationshipOverlaysBtn">Clear Relationship Overlays</button>
               <button type="button" class="ghost" id="hwRelClearResultBtn">Clear Result</button>
             </div>
             <div class="hardware-message" id="hwRelDebugMessage">Run scan or create fixture to populate relationship state.</div>
@@ -8522,6 +8532,14 @@
             hwRelDebugHandlePreviewResult(parsed);
           } else if (action === "hardwareRelationshipCutResult") {
             hwRelDebugHandleCutResult(parsed);
+          } else if (action === "connectDemoResult") {
+            hwRelDebugHandleDemoResult(parsed);
+          } else if (action === "relationshipOverlayResult") {
+            hwRelDebugHandleOverlayResult(parsed);
+          } else if (action === "relationshipFaceVerifyResult") {
+            hwRelDebugHandleFaceVerifyResult(parsed);
+          } else if (action === "relationshipDeclaredResult") {
+            hwRelDebugHandleDeclaredResult(parsed);
           } else if (action === "panelAttributesResult") {
             attrHandleFusionResult(parsed);
           } else if (action === "fridgeCabinetResult") {
@@ -8554,7 +8572,7 @@
             hardwareSetMessage("hwActionMessage", String(data || ""), "error");
           } else if (action === "hardwareCreateHolesResult") {
             hardwareSetMessage("hwActionMessage", String(data || ""), "error");
-          } else if (action === "relationshipFixtureResult" || action === "relationshipScanResult" || action === "relationshipInspectResult" || action === "hardwareRelationshipPreviewResult") {
+          } else if (action === "relationshipFixtureResult" || action === "relationshipScanResult" || action === "relationshipInspectResult" || action === "hardwareRelationshipPreviewResult" || action === "connectDemoResult" || action === "relationshipOverlayResult") {
             hwRelDebugSetMessage(String(data || ""), "error");
             hwRelDebugShowResult({ ok: false, action, error: String(data || "") });
           } else if (action === "fridgeCabinetResult") {
@@ -10754,6 +10772,8 @@
       lastScanResult: null,
       selectedRelationship: null,
       confirmedRelationship: null,
+      lastDemoReport: null,
+      lastOverlayReport: null,
     };
 
     const HW_REL_MANUAL_CONFIRMED_VERIFICATION = {
@@ -10764,7 +10784,9 @@
     };
 
     const HW_REL_NO_MANUAL_CONFIRMED_MSG =
-      "No manual_confirmed relationship available. Scan, preview, and confirm a relationship before creating cut.";
+      "No cut-safe relationship available. Confirm manually or verify faces before creating cut.";
+
+    const HW_REL_CUT_SAFE_LEVELS = new Set(["manual_confirmed", "face_verified", "generator_declared"]);
 
     const HW_REL_DEBUG_RULE = {
       type: "screw_hole",
@@ -10842,7 +10864,7 @@
 
     function hwRelDebugIsManualConfirmedForCut(relationship) {
       const verification = relationship?.verification || {};
-      return verification.level === "manual_confirmed" && verification.safeForCut === true;
+      return HW_REL_CUT_SAFE_LEVELS.has(verification.level) && verification.safeForCut === true;
     }
 
     function hwRelDebugBuildCutPayload(confirmedRelationship) {
@@ -10877,11 +10899,16 @@
       if (parsed?.ok) {
         const count = Number(parsed.createdBodies || 0);
         const warnings = Array.isArray(parsed.warnings) ? parsed.warnings : [];
+        const origin = parsed.fixtureOrigin || {};
+        const originHint =
+          origin.baseZMm !== undefined
+            ? ` Origin Z=${origin.baseZMm} mm${origin.baseXMm ? `, X+${origin.baseXMm} mm` : ""}.`
+            : "";
         const suffix = parsed.flatMode ? " (part design flat mode)" : "";
         hwRelDebugSetMessage(
           warnings.length
-            ? `${warnings.join(" ")} Created ${count} bodies${suffix}.`
-            : `Relationship fixture created (${count} bodies${suffix}). Scan data stored.`,
+            ? `${warnings.join(" ")} Created ${count} bodies${suffix}.${originHint}`
+            : `Relationship fixture created (${count} bodies${suffix}).${originHint} Scan data stored.`,
           warnings.length ? "warn" : "ok",
         );
       } else {
@@ -10942,6 +10969,197 @@
       } else {
         hwRelDebugSetMessage((parsed?.errors || ["Relationship cut failed."]).join(" "), "error");
       }
+    }
+
+    function hwRelDebugHandleDemoResult(parsed) {
+      hwRelDebugState.lastDemoReport = parsed;
+      if (parsed?.audit?.scan) {
+        hwRelDebugStoreScanResult(parsed.audit.scan);
+      } else if (parsed?.demos) {
+        const firstScan = parsed.demos.find((item) => item?.audit?.scan)?.audit?.scan;
+        if (firstScan) {
+          hwRelDebugStoreScanResult(firstScan);
+        }
+      }
+      hwRelDebugShowResult(parsed);
+      const summary = parsed?.summary || (Array.isArray(parsed?.summaries) ? parsed.summaries[0] : null);
+      if (parsed?.ok) {
+        const demoId = parsed?.demoId || summary?.demoId || parsed?.action || "demo";
+        hwRelDebugSetMessage(`Demo ${demoId}: PASS`, "ok");
+      } else {
+        hwRelDebugSetMessage((parsed?.errors || [`Demo ${parsed?.demoId || ""} failed.`]).join(" "), "error");
+      }
+    }
+
+    function hwRelDebugRunDemoFixtureFlow() {
+      hwRelDebugSetMessage("Running M4.5A Demo 1 fixture flow (fixture → scan → preview → confirm → cut)...");
+      fusionSend("relationships.runDemoFixtureFlow", { rule: HW_REL_DEBUG_RULE });
+    }
+
+    function hwRelDebugRunDemoPackOffline() {
+      hwRelDebugSetMessage("Running M4.5A demo pack offline (fixture + Overhead + negative cases)...");
+      fusionSend("relationships.runDemoPackOffline", {});
+    }
+
+    function hwRelDebugRunDemoNegativeReport() {
+      hwRelDebugSetMessage("Running M4.5A Demo 3 negative filtering report...");
+      fusionSend("relationships.runDemoNegativeReport", { useFixtureScan: true });
+    }
+
+    async function hwRelDebugCopyLastJsonReport() {
+      const payload = hwRelDebugState.lastDemoReport || hwRelDebugEl("hwRelDebugResult")?.textContent || "{}";
+      const text = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+      try {
+        await navigator.clipboard.writeText(text);
+        hwRelDebugSetMessage("Copied last JSON report to clipboard.", "ok");
+      } catch (error) {
+        hwRelDebugSetMessage(`Clipboard copy failed: ${error}`, "error");
+      }
+    }
+
+    function hwRelDebugShowDemoSummary() {
+      const report = hwRelDebugState.lastDemoReport;
+      if (!report) {
+        hwRelDebugSetMessage("No demo report yet. Run Demo Fixture Flow or Demo Pack Offline first.", "error");
+        return;
+      }
+      const summaries = Array.isArray(report.summaries)
+        ? report.summaries
+        : report.summary
+          ? [report.summary]
+          : [];
+      if (!summaries.length) {
+        hwRelDebugSetMessage("Last demo report has no summary block.", "error");
+        hwRelDebugShowResult(report);
+        return;
+      }
+      const lines = summaries.map((item) => {
+        const status = item.ok ? "PASS" : "FAIL";
+        return `${item.demoId || "demo"}: ${status} | panels=${item.panelCount} rels=${item.relationshipCount} screwEligible=${item.screwEligibleCount} cutOk=${item.cutOk}`;
+      });
+      hwRelDebugSetMessage(lines.join(" · "), report.ok ? "ok" : "error");
+      hwRelDebugShowResult({ summaries, ok: report.ok, milestone: report.milestone, demoId: report.demoId });
+    }
+
+    function hwRelDebugHandleOverlayResult(parsed) {
+      hwRelDebugState.lastOverlayReport = parsed;
+      const rel = parsed?.relationship || parsed?.inspect?.relationship;
+      if (rel?.relationshipId) {
+        hwRelDebugState.selectedRelationship = rel;
+      }
+      if (parsed?.scan) {
+        hwRelDebugStoreScanResult(parsed.scan);
+      } else if (rel) {
+        hwRelDebugState.lastScanResult = {
+          ok: true,
+          action: parsed.action || "relationships.showRelationshipOverlayForSelected",
+          relationships: [rel],
+          panels: parsed.panels || [],
+          relationshipCount: 1,
+        };
+      }
+      hwRelDebugUpdateConfirmButtonLabel();
+      hwRelDebugShowResult(parsed);
+      if (parsed?.ok) {
+        const relId = parsed?.relationshipId || rel?.relationshipId || "relationship";
+        if (parsed?.action === "relationships.clearRelationshipOverlays") {
+          hwRelDebugSetMessage(`Cleared ${parsed.removedCount || 0} relationship overlay artifact(s).`, "ok");
+        } else if (parsed?.action === "relationships.runOverlaySelfCheck") {
+          hwRelDebugSetMessage(`Overlay self-check PASS (${parsed.implVersion || parsed.expectedFusionBuild || "unknown build"}).`, "ok");
+        } else {
+          const ids = (parsed.selectedPanelIds || []).join(" ↔ ");
+          const pairHint = ids ? ` for ${ids}` : "";
+          hwRelDebugSetMessage(
+            `Overlay${pairHint}: ${rel?.geometryType || "unknown"} / ${rel?.relationshipType || "unknown"} (${relId}, ${parsed.implVersion || "unknown build"}).`,
+            "ok",
+          );
+        }
+      } else {
+        const hint = parsed?.hint ? ` ${parsed.hint}` : "";
+        hwRelDebugSetMessage((parsed?.errors || ["Relationship overlay action failed."]).join(" ") + hint, "error");
+      }
+    }
+
+    function hwRelDebugReconcileOverheadDeclarations() {
+      hwRelDebugSetMessage("Reconciling Overhead generator-declared relationships...");
+      fusionSend("relationships.reconcileGeneratorDeclarations", { generator: "overhead", toleranceMm: 0.5 });
+    }
+
+    function hwRelDebugHandleDeclaredResult(parsed) {
+      hwRelDebugShowResult(parsed);
+      const rels = parsed?.declaredRelationships || [];
+      const first = rels.find((rel) => rel?.verification?.level === "generator_declared" && rel?.geometryValidation?.ok);
+      if (first) {
+        hwRelDebugState.selectedRelationship = first;
+        hwRelDebugState.confirmedRelationship = first;
+        hwRelDebugState.lastScanResult = {
+          ok: true,
+          action: parsed.action || "relationships.reconcileGeneratorDeclarations",
+          relationships: rels,
+          panels: [],
+          relationshipCount: rels.length,
+        };
+      }
+      hwRelDebugUpdateConfirmButtonLabel();
+      if (parsed?.ok) {
+        hwRelDebugSetMessage(
+          `Reconciled ${parsed.declarationCount || 0} Overhead declarations (${parsed.geometryOkCount || 0} geometry OK).`,
+          "ok",
+        );
+      } else {
+        hwRelDebugSetMessage((parsed?.errors || ["Generator declaration reconcile failed."]).join(" "), "error");
+      }
+    }
+
+    function hwRelDebugVerifySelectedPairFaces() {
+      hwRelDebugSetMessage("Verifying face contact for selected pair...");
+      fusionSend("relationships.verifySelectedPairFaces", { toleranceMm: 0.5 });
+    }
+
+    function hwRelDebugHandleFaceVerifyResult(parsed) {
+      hwRelDebugShowResult(parsed);
+      const rel = parsed?.relationship;
+      if (rel?.relationshipId) {
+        hwRelDebugState.selectedRelationship = rel;
+        if (parsed?.ok && rel?.verification?.level === "face_verified") {
+          hwRelDebugState.confirmedRelationship = rel;
+        }
+      }
+      if (parsed?.panels?.length) {
+        hwRelDebugState.lastScanResult = {
+          ok: true,
+          action: parsed.action || "relationships.verifySelectedPairFaces",
+          relationships: rel ? [rel] : [],
+          panels: parsed.panels,
+          relationshipCount: rel ? 1 : 0,
+        };
+      }
+      hwRelDebugUpdateConfirmButtonLabel();
+      if (parsed?.ok) {
+        const ids = (parsed.selectedPanelIds || []).join(" ↔ ");
+        const match = parsed.faceMatch || {};
+        hwRelDebugSetMessage(
+          `Face verified for ${ids}: ${match.matchedFaceAId} ↔ ${match.matchedFaceBId} (distance=${match.planeDistanceMm ?? "?"} mm).`,
+          "ok",
+        );
+      } else {
+        hwRelDebugSetMessage((parsed?.errors || ["Face verification failed."]).join(" "), "error");
+      }
+    }
+
+    function hwRelDebugShowOverlayForSelectedPair() {
+      hwRelDebugSetMessage("Inspecting selected pair and showing relationship overlay...");
+      fusionSend("relationships.showRelationshipOverlayForSelected", { toleranceMm: 0.5 });
+    }
+
+    function hwRelDebugClearRelationshipOverlays() {
+      hwRelDebugSetMessage("Clearing relationship overlay artifacts...");
+      fusionSend("relationships.clearRelationshipOverlays", {});
+    }
+
+    function hwRelDebugRunOverlaySelfCheck() {
+      hwRelDebugSetMessage("Running relationship overlay self-check...");
+      fusionSend("relationships.runOverlaySelfCheck", {});
     }
 
     function hwRelDebugCreateCutFromConfirmed() {
@@ -11065,9 +11283,19 @@
       hwRelDebugEl("hwRelCreateFixtureBtn")?.addEventListener("click", hwRelDebugCreateFixture);
       hwRelDebugEl("hwRelScanBtn")?.addEventListener("click", hwRelDebugScan);
       hwRelDebugEl("hwRelInspectSelectedBtn")?.addEventListener("click", hwRelDebugInspectSelected);
+      hwRelDebugEl("hwRelVerifySelectedFacesBtn")?.addEventListener("click", hwRelDebugVerifySelectedPairFaces);
+      hwRelDebugEl("hwRelReconcileOverheadDeclarationsBtn")?.addEventListener("click", hwRelDebugReconcileOverheadDeclarations);
       hwRelDebugEl("hwRelPreviewScrewHolesBtn")?.addEventListener("click", hwRelDebugPreviewScrewHoles);
       hwRelDebugEl("hwRelConfirmForCutBtn")?.addEventListener("click", hwRelDebugConfirmForCut);
       hwRelDebugEl("hwRelCreateCutFromConfirmedBtn")?.addEventListener("click", hwRelDebugCreateCutFromConfirmed);
+      hwRelDebugEl("hwRelRunDemoFixtureFlowBtn")?.addEventListener("click", hwRelDebugRunDemoFixtureFlow);
+      hwRelDebugEl("hwRelRunDemoPackOfflineBtn")?.addEventListener("click", hwRelDebugRunDemoPackOffline);
+      hwRelDebugEl("hwRelRunDemoNegativeBtn")?.addEventListener("click", hwRelDebugRunDemoNegativeReport);
+      hwRelDebugEl("hwRelCopyLastJsonBtn")?.addEventListener("click", hwRelDebugCopyLastJsonReport);
+      hwRelDebugEl("hwRelShowDemoSummaryBtn")?.addEventListener("click", hwRelDebugShowDemoSummary);
+      hwRelDebugEl("hwRelShowOverlayForSelectedBtn")?.addEventListener("click", hwRelDebugShowOverlayForSelectedPair);
+      hwRelDebugEl("hwRelRunOverlaySelfCheckBtn")?.addEventListener("click", hwRelDebugRunOverlaySelfCheck);
+      hwRelDebugEl("hwRelClearRelationshipOverlaysBtn")?.addEventListener("click", hwRelDebugClearRelationshipOverlays);
       hwRelDebugEl("hwRelClearResultBtn")?.addEventListener("click", hwRelDebugClearResult);
       hwRelDebugUpdateConfirmButtonLabel();
     }

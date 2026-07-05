@@ -62,6 +62,7 @@ def purge_stale_plugin_modules() -> None:
         "adapter",
         "modules.",
         "relationship_",
+        "face_verification",
         "screw_hole_from_relationship",
         "relationship_screw_hole_fusion",
         "hardware_models",

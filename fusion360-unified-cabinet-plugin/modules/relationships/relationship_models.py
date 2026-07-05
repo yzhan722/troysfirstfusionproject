@@ -222,16 +222,34 @@ def manual_confirmed_verification() -> RelationshipVerification:
     )
 
 
+def face_verified_verification() -> RelationshipVerification:
+    return RelationshipVerification(
+        level="face_verified",
+        safeForPreview=True,
+        safeForCut=True,
+        requiresManualConfirmation=False,
+    )
+
+
+def generator_declared_verification(*, geometry_ok: bool = False) -> RelationshipVerification:
+    return RelationshipVerification(
+        level="generator_declared",
+        safeForPreview=True,
+        safeForCut=bool(geometry_ok),
+        requiresManualConfirmation=not bool(geometry_ok),
+    )
+
+
 def verification_from_dict(data: Optional[Dict[str, Any]]) -> RelationshipVerification:
     if not isinstance(data, dict):
         return bbox_candidate_verification()
     level = str(data.get("level") or "bbox_candidate")
-    if level == "manual_confirmed":
+    if level in ("manual_confirmed", "face_verified", "generator_declared"):
         return RelationshipVerification(
             level=level,
             safeForPreview=bool(data.get("safeForPreview", True)),
-            safeForCut=bool(data.get("safeForCut", True)),
-            requiresManualConfirmation=bool(data.get("requiresManualConfirmation", False)),
+            safeForCut=bool(data.get("safeForCut", level != "generator_declared")),
+            requiresManualConfirmation=bool(data.get("requiresManualConfirmation", level == "generator_declared")),
         )
     return RelationshipVerification(
         level=level,
@@ -253,6 +271,22 @@ def confirm_relationship_for_cut(relationship: Dict[str, Any]) -> Dict[str, Any]
     notes.append("Manual cut confirmation applied (debug session only).")
     confirmed["auditNotes"] = notes
     return confirmed
+
+
+def upgrade_relationship_with_face_verification(
+    relationship: Dict[str, Any],
+    face_match: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not isinstance(relationship, dict):
+        raise TypeError("relationship must be a dict")
+    upgraded = dict(relationship)
+    upgraded["verification"] = face_verified_verification().to_dict()
+    upgraded["faceMatch"] = dict(face_match or {})
+    upgraded["detectionMethod"] = str(relationship.get("detectionMethod") or DETECTION_METHOD_BBOX_AABB)
+    notes = list(upgraded.get("auditNotes") or [])
+    notes.append("Face-level verification applied (M5 axis-aligned v1).")
+    upgraded["auditNotes"] = notes
+    return upgraded
 
 
 @dataclass

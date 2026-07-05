@@ -7,6 +7,7 @@ import {
 } from "./geometry.ts";
 import { generateOHCSvgPreview } from "./svgPreview.ts";
 import type { Board, OverheadCabinetParams, OverheadCabinetResult } from "./types.ts";
+import { relationshipDeclarationsForBoards } from "./relationshipDeclarations.ts";
 
 export * from "./geometry.ts";
 export * from "./svgPreview.ts";
@@ -242,6 +243,7 @@ export function generateOverheadCabinet(rawParams: OverheadCabinetParams): Overh
       },
       boards: [],
       features: [],
+      relationshipDeclarations: [],
       validation,
       debug: {
         phase: "geometry_v1",
@@ -253,6 +255,7 @@ export function generateOverheadCabinet(rawParams: OverheadCabinetParams): Overh
 
   const geometry = calculateOverheadGeometry(inputs);
   const boards = legacyToBoards(geometry, inputs);
+  const relationshipDeclarations = relationshipDeclarationsForBoards(boards);
 
   return {
     params: {
@@ -279,6 +282,7 @@ export function generateOverheadCabinet(rawParams: OverheadCabinetParams): Overh
       ...geometry.front_panels,
       ...geometry.hinge_holes,
     ],
+    relationshipDeclarations,
     validation,
     debug: {
       phase: "geometry_v1",

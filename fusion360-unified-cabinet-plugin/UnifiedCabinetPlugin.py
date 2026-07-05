@@ -69,6 +69,7 @@ class UnifiedCabinetPluginApp:
         tools_module = importlib.reload(importlib.import_module("modules.tools.controller"))
         hardware_module = importlib.reload(importlib.import_module("modules.hardware.controller"))
         relationships_module = importlib.reload(importlib.import_module("modules.relationships.controller"))
+        connect_demo_module = importlib.reload(importlib.import_module("modules.relationships.connect_demo_controller"))
         panel_attributes_module = importlib.reload(importlib.import_module("panel_attributes.controller"))
 
         self.fusion = FusionAdapter()
@@ -82,6 +83,7 @@ class UnifiedCabinetPluginApp:
         tools = tools_module.ToolsController()
         hardware = hardware_module.HardwareController(self.plugin_dir, self.fusion)
         relationships = relationships_module.RelationshipsController(self.fusion)
+        connect_demo = connect_demo_module.ConnectDemoController(self.plugin_dir, self.fusion, relationships, hardware)
         panel_attributes = panel_attributes_module.PanelAttributesController(self.fusion)
         routes = {
             "fridge.calculate": fridge.calculate,
@@ -110,6 +112,14 @@ class UnifiedCabinetPluginApp:
             "relationships.inspectSelected": relationships.inspect_selected,
             "relationships.inspectPair": relationships.inspect_pair,
             "relationships.createTestFixture": relationships.create_test_fixture,
+            "relationships.showRelationshipOverlayForSelected": relationships.show_relationship_overlay_for_selected,
+            "relationships.verifySelectedPairFaces": relationships.verify_selected_pair_faces,
+            "relationships.reconcileGeneratorDeclarations": relationships.reconcile_generator_declarations,
+            "relationships.clearRelationshipOverlays": relationships.clear_relationship_overlays,
+            "relationships.runOverlaySelfCheck": relationships.run_overlay_selfcheck,
+            "relationships.runDemoFixtureFlow": connect_demo.run_demo_fixture_flow,
+            "relationships.runDemoNegativeReport": connect_demo.run_demo_negative_report,
+            "relationships.runDemoPackOffline": connect_demo.run_demo_pack_offline,
             "panelAttributes.searchPanels": panel_attributes.search_panels,
             "panelAttributes.selectByTag": panel_attributes.select_by_tag,
             "panelAttributes.selectPanel": panel_attributes.select_panel,

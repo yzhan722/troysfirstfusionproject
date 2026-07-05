@@ -10,21 +10,19 @@
 - [x] Offline regression passes locally (automated):
   ```bash
   python fusion360-unified-cabinet-plugin/tests/run_plugin_offline_regression.py
-  python fusion360-unified-cabinet-plugin/tests/run_m3_smoke_offline.py
+  python fusion360-unified-cabinet-plugin/tests/run_m6_smoke_offline.py
   ```
 - [ ] Fusion 360 with CabinetNC add-in loaded from this repo (`fusion360-unified-cabinet-plugin/`)
 - [ ] Active **Design** document (Part or Assembly — fixture supports both)
 - [x] Latest plugin code includes M3 UI button **Create Screw Holes From Confirmed Relationship**
 
-### Automated runners
+### Automated runners (historical)
 
-| Script | Environment | Steps |
-|--------|-------------|-------|
-| `tests/run_m3_smoke_offline.py` | Terminal (no Fusion) | 1–6 logic + gates |
-| `tests/run_m3_fusion_smoke_in_fusion.py` | Fusion Scripts & Add-Ins | 1–7 real geometry |
+M3/M4/M5 smoke scripts removed. Use:
+- M6 offline: `tests/run_m6_smoke_offline.py`
+- Regression: `tests/run_relationship_regression.py` (plugin root or `%APPDATA%\Autodesk\Autodesk Fusion 360\API\Scripts\m5_connect_smoke.py`)
 
-Copy of Fusion script is installed to:
-`%APPDATA%\Autodesk\Autodesk Fusion 360\API\Scripts\run_m3_fusion_smoke_in_fusion.py`
+Archived M3 results: `tests/output/m3_fusion_smoke_results.json`
 
 ---
 

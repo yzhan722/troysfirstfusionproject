@@ -140,6 +140,19 @@ function testGenerateOverheadCabinetBoardsAndFeatures() {
   assert.ok(result.debug.svgPreview?.includes("OHC front elevation geometry preview"));
 }
 
+function testRelationshipDeclarationsEmbeddedInResult() {
+  const result = generateOverheadCabinet({
+    cabinetWidth: 900,
+    cabinetDepth: 350,
+    cabinetHeight: 720,
+    zones: [{ id: "zone-1", type: "up_flap", width: 900 }],
+  });
+  assert.equal(result.relationshipDeclarations.length, 4);
+  const ids = new Set(result.relationshipDeclarations.map((item) => item.declarationId));
+  assert.ok(ids.has("oh_bp_d0_back_to_divider"));
+  assert.ok(ids.has("oh_t1_t2_top_rail_stack"));
+}
+
 function testSvgPreviewUsesResolvedGeometry() {
   const geometry = calculateOverheadGeometry(baseParams);
   const svg = generateOHCSvgPreview(geometry, { selectedZoneIndex: 1 });
@@ -169,6 +182,7 @@ const tests = [
   testV7FrontPanelsAndHingeHoles,
   testFrontPanelXUsesOuterAndSharedClearance,
   testGenerateOverheadCabinetBoardsAndFeatures,
+  testRelationshipDeclarationsEmbeddedInResult,
   testSvgPreviewUsesResolvedGeometry,
   testInvalidWidthReportsError,
 ];

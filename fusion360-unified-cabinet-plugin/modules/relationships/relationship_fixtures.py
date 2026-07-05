@@ -44,7 +44,19 @@ except Exception:
     PANEL_METADATA_ATTR = "metadata"
 
 FIXTURE_BASE_Z_MM = 12000.0
+FIXTURE_PART_BASE_Z_MM = 0.0
+FIXTURE_PART_X_OFFSET_MM = 3200.0
 FIXTURE_SPACING_X_MM = 1200.0
+
+
+def resolve_fixture_base_z_mm(flat_mode: bool) -> float:
+    """Part designs place fixtures at ground level so bodies are visible in the viewport."""
+    return FIXTURE_PART_BASE_Z_MM if flat_mode else FIXTURE_BASE_Z_MM
+
+
+def resolve_fixture_base_x_mm(flat_mode: bool) -> float:
+    """Shift part-mode fixtures away from typical cabinet geometry at the origin."""
+    return FIXTURE_PART_X_OFFSET_MM if flat_mode else 0.0
 
 
 def expected_fixture_cases() -> List[Dict[str, Any]]:
@@ -82,9 +94,28 @@ def expected_fixture_cases() -> List[Dict[str, Any]]:
     ]
 
 
-def fixture_panel_definitions() -> List[Dict[str, Any]]:
+def fixture_panel_definitions(
+    base_z_mm: Optional[float] = None,
+    base_x_mm: Optional[float] = None,
+) -> List[Dict[str, Any]]:
     """Pure-data fixture layout used for offline tests and Fusion creation."""
-    z = FIXTURE_BASE_Z_MM
+    z = FIXTURE_BASE_Z_MM if base_z_mm is None else float(base_z_mm)
+    ox = 0.0 if base_x_mm is None else float(base_x_mm)
+    panels = _fixture_panel_definitions_at_z(z)
+    if not ox:
+        return panels
+    shifted: List[Dict[str, Any]] = []
+    for panel in panels:
+        item = dict(panel)
+        bbox = dict(item["bbox"])
+        bbox["x0"] = float(bbox["x0"]) + ox
+        bbox["x1"] = float(bbox["x1"]) + ox
+        item["bbox"] = bbox
+        shifted.append(item)
+    return shifted
+
+
+def _fixture_panel_definitions_at_z(z: float) -> List[Dict[str, Any]]:
     return [
         {
             "caseId": "edge_to_surface_001",
@@ -262,21 +293,29 @@ def _set_attribute(attrs, group, name, value):
         attrs.add(group, name, str(value))
 
 
-def create_relationship_test_fixture(root_component) -> Tuple[List[Dict[str, Any]], Optional[str], Optional[str]]:
+def create_relationship_test_fixture(root_component) -> Tuple[List[Dict[str, Any]], Optional[str], Optional[str], Dict[str, Any]]:
     if not root_component or _add_box_body is None or adsk_core is None:
         return [], "Fusion API or box-body helper is unavailable.", None
 
     run_id = time.strftime("%H%M%S")
     assembly_name = "REL_TEST_FIXTURE_{}".format(run_id)
     assembly, flat_mode = _resolve_fixture_container(root_component, assembly_name)
-    mode_note = (
-        "Part design detected: fixture bodies were created in the root component because sub-components are not allowed."
-        if flat_mode
-        else None
-    )
+    base_z_mm = resolve_fixture_base_z_mm(flat_mode)
+    base_x_mm = resolve_fixture_base_x_mm(flat_mode)
+    placement = {
+        "baseZMm": base_z_mm,
+        "baseXMm": base_x_mm,
+        "flatMode": flat_mode,
+    }
+    mode_note = None
+    if flat_mode:
+        mode_note = (
+            "Part design detected: fixture bodies were created on the root component at "
+            "Z={:.0f} mm, X+{:.0f} mm (visible near the model floor).".format(base_z_mm, base_x_mm)
+        )
     created: List[Dict[str, Any]] = []
 
-    for panel_def in fixture_panel_definitions():
+    for panel_def in fixture_panel_definitions(base_z_mm=base_z_mm, base_x_mm=base_x_mm):
         panel_id = panel_def["panelId"]
         if flat_mode:
             component = root_component
@@ -316,6 +355,7 @@ def create_relationship_test_fixture(root_component) -> Tuple[List[Dict[str, Any
                 "componentName": component.name,
                 "bbox": panel_def["bbox"],
                 "flatMode": flat_mode,
+                "_fusionBody": body,
             }
         )
 
@@ -328,4 +368,4 @@ def create_relationship_test_fixture(root_component) -> Tuple[List[Dict[str, Any
     except Exception:
         pass
 
-    return created, None, mode_note
+    return created, None, mode_note, placement

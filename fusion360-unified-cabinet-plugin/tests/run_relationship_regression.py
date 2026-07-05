@@ -71,7 +71,9 @@ def _print_section(title: str) -> None:
 def run_unittest_suite() -> bool:
     _print_section("Relationship unit tests")
     loader = unittest.TestLoader()
-    suite = loader.discover(str(ROOT / "tests"), pattern="test_relationship*.py")
+    suite = unittest.TestSuite()
+    for pattern in ("test_relationship*.py", "test_face_verification.py", "test_generator_declared_relationships.py"):
+        suite.addTests(loader.discover(str(ROOT / "tests"), pattern=pattern))
     runner = unittest.TextTestRunner(verbosity=1)
     result = runner.run(suite)
     return result.wasSuccessful()
@@ -361,6 +363,11 @@ def validate_routes_registered() -> bool:
         "relationships.scanSelected",
         "relationships.inspectPair",
         "relationships.createTestFixture",
+        "relationships.showRelationshipOverlayForSelected",
+        "relationships.reconcileGeneratorDeclarations",
+        "relationships.verifySelectedPairFaces",
+        "relationships.runOverlaySelfCheck",
+        "relationships.clearRelationshipOverlays",
         "modules.relationships.controller",
     ]
     missing = [route for route in required if route not in text]

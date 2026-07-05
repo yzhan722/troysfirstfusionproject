@@ -1,0 +1,161 @@
+"""Tests for M6 generator-declared relationships."""
+
+import sys
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+HW_DIR = ROOT / "modules" / "hardware"
+REL_DIR = ROOT / "modules" / "relationships"
+for path in (HW_DIR, REL_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
+from generator_bridge_runner import load_params_fixture, run_overhead  # noqa: E402
+from generator_declared_service import reconcile_generator_declarations  # noqa: E402
+from generator_panel_adapter import snapshots_from_generator_result  # noqa: E402
+from overhead_declared_relationships import extract_board_suffix, list_overhead_declarations_for_panel_ids  # noqa: E402
+from relationship_service import build_panel_snapshot_from_dict, dedupe_panel_snapshots  # noqa: E402
+from screw_hole_from_relationship import (  # noqa: E402
+    plan_screw_hole_cut_from_relationship,
+    preview_screw_holes_from_relationship,
+    validate_relationship_for_cut,
+)
+
+
+class GeneratorDeclaredRelationshipTests(unittest.TestCase):
+    def _overhead_snapshots(self):
+        bridge = run_overhead(load_params_fixture("overhead_edge_only.json"))
+        return [
+            build_panel_snapshot_from_dict(item)
+            for item in snapshots_from_generator_result("overhead", bridge)
+        ]
+
+    def test_overhead_declarations_match_skeleton_boards(self):
+        snapshots = self._overhead_snapshots()
+        panel_ids = {snap.panelId for snap in snapshots}
+        declarations = list_overhead_declarations_for_panel_ids(panel_ids)
+        self.assertGreaterEqual(len(declarations), 4)
+        ids = {item["declarationId"] for item in declarations}
+        self.assertIn("oh_bp_d0_back_to_divider", ids)
+
+    def test_overhead_declarations_match_prefixed_panel_ids(self):
+        panel_ids = {
+            "ohc.m6_smoke.BP",
+            "ohc.m6_smoke.D0",
+            "ohc.m6_smoke.FP0",
+            "ohc.m6_smoke.T1",
+            "ohc.m6_smoke.T2",
+        }
+        declarations = list_overhead_declarations_for_panel_ids(panel_ids, preferred_run_token="m6_smoke")
+        self.assertGreaterEqual(len(declarations), 3)
+        bp_d0 = next(item for item in declarations if item["declarationId"] == "oh_bp_d0_back_to_divider")
+        self.assertEqual(bp_d0["panelAId"], "ohc.m6_smoke.BP")
+        self.assertEqual(bp_d0["panelBId"], "ohc.m6_smoke.D0")
+
+    def test_reconcile_scopes_to_preferred_run_when_multiple_runs_present(self):
+        snapshots = self._overhead_snapshots()
+        stale = [
+            build_panel_snapshot_from_dict(
+                {
+                    **snap.to_dict(),
+                    "panelId": snap.panelId.replace("ohc.", "ohc.old_run.", 1) if snap.panelId.startswith("ohc.") else f"ohc.old_run.{snap.panelId}",
+                }
+            )
+            for snap in snapshots[:5]
+        ]
+        mixed = snapshots + stale
+        report = reconcile_generator_declarations(
+            mixed,
+            generator="overhead",
+            preferred_run_token="m6_smoke",
+        )
+        self.assertTrue(report.get("ok"), report.get("errors"))
+        self.assertGreaterEqual(report.get("declarationCount", 0), 4)
+
+    def test_overhead_bridge_emits_relationship_declarations(self):
+        bridge = run_overhead(load_params_fixture("overhead_edge_only.json"))
+        declarations = bridge.get("relationshipDeclarations") or []
+        self.assertGreaterEqual(len(declarations), 4)
+        ids = {item.get("declarationId") for item in declarations}
+        self.assertIn("oh_bp_d0_back_to_divider", ids)
+
+    def test_reconcile_uses_embedded_generator_declarations(self):
+        bridge = run_overhead(load_params_fixture("overhead_edge_only.json"))
+        snapshots = [
+            build_panel_snapshot_from_dict(item)
+            for item in snapshots_from_generator_result("overhead", bridge)
+        ]
+        embedded = bridge.get("relationshipDeclarations") or []
+        report = reconcile_generator_declarations(
+            snapshots,
+            generator="overhead",
+            embedded_declarations=embedded,
+        )
+        self.assertTrue(report.get("ok"), report.get("errors"))
+        self.assertGreaterEqual(report.get("geometryOkCount", 0), 4)
+
+    def test_reconcile_overhead_declarations(self):
+        snapshots = self._overhead_snapshots()
+        report = reconcile_generator_declarations(snapshots, generator="overhead")
+        self.assertTrue(report.get("ok"), report.get("errors"))
+        self.assertGreaterEqual(report.get("declarationCount", 0), 4)
+        self.assertGreaterEqual(report.get("geometryOkCount", 0), 4)
+        relationships = report.get("declaredRelationships") or []
+        bp_d0 = next(
+            rel
+            for rel in relationships
+            if extract_board_suffix(rel["panelA"]["panelId"]) == "BP"
+            and extract_board_suffix(rel["panelB"]["panelId"]) == "D0"
+        )
+        self.assertEqual(bp_d0["verification"]["level"], "generator_declared")
+        self.assertTrue(bp_d0["geometryValidation"]["ok"])
+        self.assertTrue(bp_d0["verification"]["safeForCut"])
+
+    def test_declared_bp_d0_supports_preview_and_cut_plan(self):
+        snapshots = self._overhead_snapshots()
+        report = reconcile_generator_declarations(snapshots, generator="overhead")
+        rel = next(
+            item["relationship"]
+            for item in report.get("reconciled") or []
+            if item.get("declarationId") == "oh_bp_d0_back_to_divider"
+        )
+        panel_map = {snap.panelId: snap.to_dict() for snap in snapshots}
+        host_id = rel["roles"]["hostPanelId"]
+        target_id = rel["roles"]["targetPanelId"]
+        panel_snapshots = {host_id: panel_map[host_id], target_id: panel_map[target_id]}
+        self.assertIsNone(validate_relationship_for_cut(rel))
+        preview = preview_screw_holes_from_relationship(rel, panel_snapshots=panel_snapshots)
+        self.assertTrue(preview.get("ok"), preview)
+        plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=panel_snapshots)
+        self.assertTrue(plan.get("ok"), plan)
+
+    def test_design_geometry_reconcile_accepts_bp_d0_when_physical_bbox_overlaps(self):
+        snapshots = self._overhead_snapshots()
+        panel_map = {snap.panelId: snap for snap in snapshots}
+        bp = panel_map["BP"]
+        d0 = panel_map["D0"]
+        physical_overlap = [
+            build_panel_snapshot_from_dict(
+                {
+                    **bp.to_dict(),
+                    "bbox": {"x0": bp.bbox.x0, "x1": bp.bbox.x1, "y0": bp.bbox.y0, "y1": bp.bbox.y1, "z0": 15.0, "z1": 30.0},
+                }
+            ),
+            build_panel_snapshot_from_dict(
+                {
+                    **d0.to_dict(),
+                    "bbox": {"x0": d0.bbox.x0, "x1": d0.bbox.x1, "y0": d0.bbox.y0, "y1": d0.bbox.y1, "z0": 23.0, "z1": d0.bbox.z1},
+                }
+            ),
+        ]
+        physical_report = reconcile_generator_declarations(physical_overlap, generator="overhead")
+        self.assertFalse(physical_report.get("ok"))
+        design_report = reconcile_generator_declarations(snapshots, generator="overhead")
+        self.assertTrue(design_report.get("ok"), design_report.get("errors"))
+        self.assertGreaterEqual(design_report.get("geometryOkCount", 0), 4)
+
+
+if __name__ == "__main__":
+    unittest.main()

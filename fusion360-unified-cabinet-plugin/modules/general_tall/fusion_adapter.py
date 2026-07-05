@@ -1464,6 +1464,17 @@ def create_rough_bodies_from_board_result(
     summary["_containerComponent"] = container
     if container_warning:
         summary["warnings"].append(container_warning)
+    declarations = result.get("relationshipDeclarations") if isinstance(result, dict) else None
+    if isinstance(declarations, list) and declarations and container is not root_comp:
+        try:
+            container.attributes.add(
+                ATTRIBUTE_GROUP,
+                "relationshipDeclarations",
+                json.dumps(declarations, ensure_ascii=False, separators=(",", ":")),
+            )
+            summary["relationshipDeclarationCount"] = len(declarations)
+        except Exception as ex:
+            summary["warnings"].append("Could not write relationshipDeclarations on assembly: {}".format(ex))
     for index, board in enumerate(boards):
         board_id = str(board.get("id") or "board-{}".format(index + 1))
         bbox = _board_bbox(board)

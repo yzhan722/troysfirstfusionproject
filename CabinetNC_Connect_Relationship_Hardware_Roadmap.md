@@ -57,11 +57,24 @@ M4 Real Cabinet Smoke:
   ✅ Overhead generator Fusion smoke PASS (2026-07-03, Fusion 2703.1.20)
   ✅ offline + Fusion runners; BP↔FP0 edge_to_surface cut on real bodies
 
+M4.5A Demo / Golden Case Pack:
+  ✅ connect_demo_pack.py (3 demos, eligibility, summaries)
+  ✅ offline runner ALL PASS (fixture + Overhead + negative filtering)
+
+M4.6A Relationship Visual Overlay:
+  ✅ overlay line + labels (CustomGraphics v3)
+  ✅ selected-pair overlay route (Show Overlay For Selected Pair)
+  ✅ offline self-check + regression PASS
+  ✅ Fusion validated by user
+
 M5 Face Verification:
-  ❌ not started (next milestone per roadmap)
+  ✅ SEALED (2026-07-05) — face_verified + verifySelectedPairFaces
+  (M5 one-click smoke scripts removed; use regression + Debug UI)
 
 M6 Generator Declared Relationships:
-  ❌ not implemented
+  ✅ SEALED (2026-07-05) — Overhead v1 offline + Fusion smoke PASS
+  ✅ relationshipDeclarations in Overhead generator JSON + assembly attribute
+  ✅ reconcile + generator_declared cut gate + design_preferred bbox validation
 
 M7 Formal Connect UI:
   ❌ not implemented
@@ -793,7 +806,20 @@ Add filters only after observing real cabinet output:
 ## Status
 
 ```text
-❌ Not started
+✅ SEALED — offline + Fusion fixture smoke complete (2026-07-05)
+
+Completed:
+  ✅ face_verified verification level
+  ✅ face_verification.py + face_verification_fusion.py (BRep faces)
+  ✅ relationships.verifySelectedPairFaces + Debug UI
+  ✅ cut gate accepts face_verified
+  ✅ offline tests + run_m5_smoke_offline.py ALL PASS
+  ✅ Fusion m5_connect_smoke.py ALL PASS (8/8 steps, Fusion 2703.1.20)
+  ✅ Results: tests/output/m5_fusion_smoke_results.json
+
+Optional follow-up (not blocking M6):
+  ❌ real Overhead pair face verify in Fusion
+  ❌ BRep face bounds refinement beyond axis-aligned v1
 ```
 
 ## Goal
@@ -912,7 +938,21 @@ Do not support:
 ## Status
 
 ```text
-❌ Not started
+✅ SEALED — Overhead v1 (2026-07-05)
+
+Completed:
+  ✅ generator_declared verification level
+  ✅ overhead_declared_relationships.py + modules/overheadCabinet/relationshipDeclarations.ts
+  ✅ generator_declared_relationships.py + generator_declared_service.py
+  ✅ relationships.reconcileGeneratorDeclarations + Debug UI button
+  ✅ cut gate accepts generator_declared when geometryValidation.ok
+  ✅ offline tests + run_m6_smoke_offline.py PASS
+  ✅ Fusion m6_connect_smoke.py PASS (7/7 steps, Fusion 2703.1.20)
+  ✅ relationshipDeclarations embedded in Overhead generator JSON output
+  ✅ assembly component attribute + reconcile loads embedded declarations
+
+Next extension (not blocking M7):
+  ❌ General Tall / Kitchen / Lounge / Fridge generators
 ```
 
 ## Goal
@@ -1188,18 +1228,40 @@ If any answer violates the global rules, stop and ask for clarification.
 The next active milestone is:
 
 ```text
-Milestone 5 — Face-Level Relationship Verification
+Milestone 7 — Formal Connect UI
 ```
 
-M1–M4 are complete and sealed.
+M1–M6 are complete and sealed.
 
-Do **not** start M6 generator declarations or M7 formal UI until M5+ milestones are explicitly tasked.
+M6 reference (sealed):
+- Checklist: docs/connect-m6-generator-declared-checklist.md
+- Fusion runner: m6_connect_smoke.py
+- Offline runner: tests/run_m6_smoke_offline.py
+
+Do **not** start M7 until product UI requirements are agreed; M6 General Tall extension can proceed in parallel if needed.
+
+M5 reference (sealed, smoke scripts removed):
+- Checklist: docs/connect-m5-face-verification-checklist.md
+- Feature routes: verifySelectedPairFaces, face_verified cut gate
+
+Do **not** start M7 formal UI until M6 is sealed.
+
+M6 reference (sealed):
+- Checklist: docs/connect-m6-generator-declared-checklist.md
 
 M4 reference (sealed):
 - Checklist: docs/connect-m4-real-cabinet-smoke-checklist.md
-- Runners: tests/run_m4_smoke_offline.py, tests/run_m4_fusion_smoke_in_fusion.py
 
-M5 scope (when started):
+M4.5A reference (sealed):
+- Runner: tests/run_connect_demo_pack_offline.py
+- Output: tests/output/connect_demo_pack_summaries.json
+
+M4.6A reference (sealed):
+- Runner: tests/run_relationship_overlay_selfcheck.py
+- Route: relationships.showRelationshipOverlayForSelected
+
+M5 scope (active):
 - Upgrade selected pair verification from bbox/AABB to face-level contact
 - New verification level: `face_verified`
+- Runners: `tests/run_m5_smoke_offline.py`, `m5_connect_smoke.py` (Fusion)
 - See Milestone 5 section below

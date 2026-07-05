@@ -54,6 +54,22 @@ def main() -> int:
             failures.append(script)
 
     code = run(
+        [sys.executable, str(ROOT / "tests" / "run_relationship_overlay_selfcheck.py")],
+        cwd=ROOT,
+        label="relationship overlay selfcheck",
+    )
+    if code != 0:
+        failures.append("relationship_overlay_selfcheck")
+
+    code = run(
+        [sys.executable, str(ROOT / "tests" / "run_connect_demo_pack_offline.py")],
+        cwd=ROOT,
+        label="connect demo pack offline",
+    )
+    if code != 0:
+        failures.append("connect_demo_pack_offline")
+
+    code = run(
         [
             sys.executable,
             "-m",
@@ -66,6 +82,10 @@ def main() -> int:
             "tests.test_relationship_report",
             "tests.test_hardware_from_relationship",
             "tests.test_generator_relationships",
+            "tests.test_connect_demo_pack",
+            "tests.test_relationship_visual_overlay",
+            "tests.test_relationship_overlay_selfcheck",
+            "tests.test_relationship_fixture_placement",
             "-v",
         ],
         cwd=ROOT,

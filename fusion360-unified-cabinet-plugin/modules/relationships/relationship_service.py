@@ -143,9 +143,39 @@ def is_panel_body(body) -> bool:
     return False
 
 
-def build_panel_snapshot(body) -> PanelSnapshot:
+def design_bbox_from_body_metadata(body) -> Optional[BBoxMm]:
+    component = _parent_component(body)
+    for entity in (body, component):
+        metadata, _ = _read_metadata_dict(entity)
+        if not isinstance(metadata, dict):
+            continue
+        design = metadata.get("designGeometry")
+        if not isinstance(design, dict):
+            continue
+        try:
+            return BBoxMm(
+                x0=float(design["x0"]),
+                x1=float(design["x1"]),
+                y0=float(design["y0"]),
+                y1=float(design["y1"]),
+                z0=float(design["z0"]),
+                z1=float(design["z1"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+    return None
+
+
+def build_panel_snapshot(body, *, bbox_source: str = "physical") -> PanelSnapshot:
     meta = read_panel_metadata(body)
-    bbox = get_body_bbox_mm(body)
+    physical_bbox = get_body_bbox_mm(body)
+    bbox = physical_bbox
+    if bbox_source in ("design", "design_preferred"):
+        design_bbox = design_bbox_from_body_metadata(body)
+        if design_bbox is not None:
+            bbox = design_bbox
+        elif bbox_source == "design":
+            bbox = physical_bbox
     snapshot = PanelSnapshot(
         panelId=meta["panelId"],
         bodyName=meta["bodyName"],
@@ -215,6 +245,75 @@ def collect_panel_bodies(root_component) -> List[Any]:
     return [body for body in bodies if is_panel_body(body)]
 
 
+def find_component_by_name(component, name: str):
+    if not component or not name:
+        return None
+    try:
+        if str(getattr(component, "name", "") or "") == name:
+            return component
+    except Exception:
+        pass
+    try:
+        occurrences = component.occurrences
+        count = occurrences.count if occurrences else 0
+        for index in range(count):
+            child = occurrences.item(index).component
+            found = find_component_by_name(child, name)
+            if found:
+                return found
+    except Exception:
+        pass
+    return None
+
+
+def collect_panel_bodies_under_assembly(root_component, assembly_name: str) -> List[Any]:
+    component = find_component_by_name(root_component, assembly_name)
+    if not component:
+        return []
+    bodies: List[Any] = []
+    _walk_component_bodies(component, bodies)
+    return [body for body in bodies if is_panel_body(body)]
+
+
+def dedupe_panel_snapshots(panels: Iterable[PanelSnapshot]) -> List[PanelSnapshot]:
+    by_id: Dict[str, PanelSnapshot] = {}
+    for panel in panels:
+        panel_id = str(getattr(panel, "panelId", "") or "").strip()
+        if panel_id:
+            by_id[panel_id] = panel
+    return list(by_id.values())
+
+
+def read_relationship_declarations_from_component(component) -> List[Dict[str, Any]]:
+    if not component:
+        return []
+    groups = (
+        LEGACY_ATTRIBUTE_GROUP,
+        CABINETNC_ATTRIBUTE_GROUP,
+        PANEL_ATTRIBUTE_GROUP,
+    )
+    try:
+        from geometry_ops import ATTRIBUTE_GROUP as GEOMETRY_OPS_GROUP
+
+        groups = (GEOMETRY_OPS_GROUP,) + groups
+    except Exception:
+        pass
+    raw = None
+    for group in groups:
+        raw = _attr_value(component, group, "relationshipDeclarations")
+        if raw:
+            break
+    if not raw:
+        return []
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
+
+
 def scan_relationships(
     panels: Iterable[PanelSnapshot],
     *,
@@ -254,13 +353,20 @@ class RelationshipService:
         design = self.fusion.get_active_design() if hasattr(self.fusion, "get_active_design") else None
         return design.rootComponent if design else None
 
-    def collect_panels_from_design(self, bodies: Optional[List[Any]] = None) -> List[PanelSnapshot]:
+    def collect_panels_from_design(self, bodies: Optional[List[Any]] = None, *, bbox_source: str = "physical") -> List[PanelSnapshot]:
         if bodies is None:
             root = self._root_component()
             if not root:
                 return []
             bodies = collect_panel_bodies(root)
-        return [build_panel_snapshot(body) for body in bodies]
+        return dedupe_panel_snapshots([build_panel_snapshot(body, bbox_source=bbox_source) for body in bodies])
+
+    def collect_panels_from_assembly(self, assembly_name: str, *, bbox_source: str = "physical") -> List[PanelSnapshot]:
+        root = self._root_component()
+        if not root or not assembly_name:
+            return []
+        bodies = collect_panel_bodies_under_assembly(root, assembly_name)
+        return dedupe_panel_snapshots([build_panel_snapshot(body, bbox_source=bbox_source) for body in bodies])
 
     def scan(
         self,

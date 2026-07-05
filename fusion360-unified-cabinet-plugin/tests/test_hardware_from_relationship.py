@@ -23,6 +23,7 @@ from screw_hole_from_relationship import (  # noqa: E402
     plan_screw_hole_cut_from_relationship,
     preview_screw_holes_from_relationship,
     validate_manual_confirmed_relationship_for_cut,
+    validate_relationship_for_cut,
 )
 from relationship_models import confirm_relationship_for_cut  # noqa: E402
 
@@ -199,6 +200,20 @@ class HardwareFromRelationshipTests(unittest.TestCase):
         rel, _ = _fixture_edge_to_surface()
         confirmed = confirm_relationship_for_cut(rel)
         self.assertIsNone(validate_manual_confirmed_relationship_for_cut(confirmed))
+
+    def test_validate_relationship_for_cut_accepts_face_verified(self):
+        from relationship_models import upgrade_relationship_with_face_verification
+
+        rel, _ = _fixture_edge_to_surface()
+        verified = upgrade_relationship_with_face_verification(
+            rel,
+            {
+                "matchedFaceAId": "A::-Y",
+                "matchedFaceBId": "B::+Y",
+                "planeDistanceMm": 0.0,
+            },
+        )
+        self.assertIsNone(validate_relationship_for_cut(verified))
 
     def test_validate_manual_confirmed_rejects_safe_for_cut_false(self):
         rel, snapshots = _fixture_edge_to_surface()

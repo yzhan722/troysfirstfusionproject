@@ -11,15 +11,13 @@
 - [x] Offline M4 passes (2026-07-03 — Overhead, rel.BP.D0, holeCount=2)
 - [x] Fusion M4 passes (2026-07-03)
 
-### Automated runners
+### Automated runners (historical — M3/M4 scripts removed; use M5)
 
-| Script | Environment |
-|--------|-------------|
-| `tests/run_m4_smoke_offline.py` | Terminal |
-| `tests/run_m4_fusion_smoke_in_fusion.py` | Fusion Scripts & Add-Ins |
+M3/M4 were sealed 2026-07-03. Smoke runners superseded by M5:
+- Offline: `tests/run_m5_smoke_offline.py`
+- Fusion: `m5_connect_smoke.py`
 
-Copy both files to Fusion Scripts, or add repo script via **+**:
-`fusion360-unified-cabinet-plugin/tests/run_m4_fusion_smoke_in_fusion.py`
+Archived results: `tests/output/m4_fusion_smoke_results.json`
 
 ---
 
@@ -65,6 +63,8 @@ Fusion JSON: `fusion360-unified-cabinet-plugin/tests/output/m4_fusion_smoke_resu
 
 ## After M4 passes
 
-✅ Done. Next milestone: **M5 — Face-Level Relationship Verification** (see roadmap).
+✅ Done. Next milestones: **M4.5A Demo Pack** → **M4.6A Visual Overlay** → **M5 Face Verification** (see roadmap).
 
-Do not start M5 until explicitly tasked.
+- M4.5A: [connect-m4.5a-demo-pack-checklist.md](connect-m4.5a-demo-pack-checklist.md)
+- M4.6A: [connect-m4.6a-overlay-checklist.md](connect-m4.6a-overlay-checklist.md)
+- M5: [connect-m5-face-verification-checklist.md](connect-m5-face-verification-checklist.md)

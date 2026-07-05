@@ -21,9 +21,11 @@ ACCEPTED_RELATIONSHIP_TYPE = "structural_butt_joint"
 CUT_BLOCKED_MESSAGE = (
     "Relationship is not cut-safe. Apply manual confirmation or face verification before cut."
 )
-NO_MANUAL_CONFIRMED_FOR_CUT_MESSAGE = (
-    "No manual_confirmed relationship available. Scan, preview, and confirm a relationship before creating cut."
+NO_CUT_SAFE_RELATIONSHIP_MESSAGE = (
+    "No cut-safe relationship available. Manually confirm or verify faces before cut."
 )
+NO_MANUAL_CONFIRMED_FOR_CUT_MESSAGE = NO_CUT_SAFE_RELATIONSHIP_MESSAGE
+CUT_SAFE_LEVELS = ("manual_confirmed", "face_verified", "generator_declared")
 
 
 def resolve_relationship_verification(relationship: Dict[str, Any]) -> Dict[str, Any]:
@@ -61,14 +63,30 @@ def assert_safe_for_cut(relationship: Dict[str, Any]) -> Optional[str]:
 
 def validate_manual_confirmed_relationship_for_cut(relationship: Dict[str, Any]) -> Optional[str]:
     """Return an error message when relationship is not manual_confirmed with safeForCut=true."""
+    return validate_relationship_for_cut(relationship, required_level="manual_confirmed")
+
+
+def validate_relationship_for_cut(
+    relationship: Dict[str, Any],
+    *,
+    required_level: Optional[str] = None,
+) -> Optional[str]:
+    """Return an error when relationship is not cut-safe."""
     if not isinstance(relationship, dict):
-        return NO_MANUAL_CONFIRMED_FOR_CUT_MESSAGE
+        return NO_CUT_SAFE_RELATIONSHIP_MESSAGE
     verification = resolve_relationship_verification(relationship)
-    if verification.get("level") != "manual_confirmed" or not verification.get("safeForCut"):
-        if verification.get("level") == "manual_confirmed" and not verification.get("safeForCut"):
-            return CUT_BLOCKED_MESSAGE
-        return NO_MANUAL_CONFIRMED_FOR_CUT_MESSAGE
-    return None
+    level = str(verification.get("level") or "bbox_candidate")
+    if required_level and level != required_level:
+        return NO_CUT_SAFE_RELATIONSHIP_MESSAGE
+    if level in CUT_SAFE_LEVELS and verification.get("safeForCut"):
+        if level == "generator_declared":
+            geom_val = (relationship or {}).get("geometryValidation") or {}
+            if not geom_val.get("ok"):
+                return NO_CUT_SAFE_RELATIONSHIP_MESSAGE
+        return None
+    if level == "manual_confirmed" and not verification.get("safeForCut"):
+        return CUT_BLOCKED_MESSAGE
+    return NO_CUT_SAFE_RELATIONSHIP_MESSAGE
 
 
 def hole_count_from_contact_length(contact_length_mm: float) -> int:
