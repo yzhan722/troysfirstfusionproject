@@ -11,13 +11,12 @@
 - [x] Offline M4 passes (2026-07-03 — Overhead, rel.BP.D0, holeCount=2)
 - [x] Fusion M4 passes (2026-07-03)
 
-### Automated runners (historical — M3/M4 scripts removed; use M5)
+### Automated runners (historical — superseded by connect pipeline)
 
-M3/M4 were sealed 2026-07-03. Smoke runners superseded by M5:
-- Offline: `tests/run_m5_smoke_offline.py`
-- Fusion: `m5_connect_smoke.py`
+- Offline: `tests/run_connect_pipeline_smoke_offline.py`
+- Fusion: `connect_pipeline_smoke.py`
 
-Archived results: `tests/output/m4_fusion_smoke_results.json`
+Historical M4 seal log below (2026-07-03).
 
 ---
 

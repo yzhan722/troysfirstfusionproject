@@ -1,6 +1,7 @@
 import json
 import time
 import traceback
+from typing import Any, Dict
 
 import adsk.core
 import adsk.fusion
@@ -254,6 +255,28 @@ class HardwareController:
                 metadata_written=metadata_written,
                 warnings=warnings,
             )
+            writeback_report: Dict[str, Any] = {}
+            try:
+                import importlib
+
+                import panel_metadata_writeback
+
+                panel_metadata_writeback = importlib.reload(panel_metadata_writeback)
+                writeback_report = panel_metadata_writeback.writeback_screw_hole_feature(
+                    host_body,
+                    plan.get("feature") or {},
+                    plan.get("metadata") or {},
+                    cut_feature_name=str(getattr(cut, "name", "") or ""),
+                )
+                report["panelWriteback"] = writeback_report.get("panelWriteback")
+                report["panelFeatureCount"] = writeback_report.get("featureCount")
+                report["panelWritebackSkipped"] = writeback_report.get("skipped")
+                if writeback_report.get("errors"):
+                    report.setdefault("warnings", []).extend(writeback_report["errors"])
+            except Exception as ex:
+                report.setdefault("warnings", []).append("Panel metadata writeback failed: {}".format(ex))
+                report["panelWriteback"] = False
+            report["writeback"] = writeback_report
             if target_modified:
                 report["ok"] = False
                 report["errors"] = ["Target body was modified during host-only screw-hole cut."]

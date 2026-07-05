@@ -115,6 +115,8 @@ class UnifiedCabinetPluginApp:
             "relationships.showRelationshipOverlayForSelected": relationships.show_relationship_overlay_for_selected,
             "relationships.verifySelectedPairFaces": relationships.verify_selected_pair_faces,
             "relationships.reconcileGeneratorDeclarations": relationships.reconcile_generator_declarations,
+            "relationships.connectList": relationships.connect_list,
+            "relationships.connectExecute": relationships.connect_execute,
             "relationships.clearRelationshipOverlays": relationships.clear_relationship_overlays,
             "relationships.runOverlaySelfCheck": relationships.run_overlay_selfcheck,
             "relationships.runDemoFixtureFlow": connect_demo.run_demo_fixture_flow,

@@ -77,13 +77,17 @@ M6 Generator Declared Relationships:
   ✅ reconcile + generator_declared cut gate + design_preferred bbox validation
 
 M7 Formal Connect UI:
-  ❌ not implemented
+  ✅ SEALED (2026-07-05) — Formal Connect card + offline/Fusion smoke
+  ✅ connect_list / connect_execute + action gates (preview/confirm/cut)
+  ✅ palette Connect M7 UI (filters, table, detail, operation results)
 
 M8 Panel Metadata Writeback:
-  ❌ not started
+  ✅ SEALED (2026-07-05) — body features[] writeback after screw-hole cut
+  ✅ panel_metadata_writeback + dedupe + metadata scan compatibility
 
 M9 Expand Hardware Types:
-  ❌ not started
+  ✅ SEALED (v1 scaffold — 2026-07-05) — hardware_rule_engine registry
+  ✅ screw_hole implemented; tongue/groove/hinge/lock/runner scaffold (cut blocked)
 ```
 
 Current relationship layer is **not production-truth**. It is currently:
@@ -946,8 +950,7 @@ Completed:
   ✅ generator_declared_relationships.py + generator_declared_service.py
   ✅ relationships.reconcileGeneratorDeclarations + Debug UI button
   ✅ cut gate accepts generator_declared when geometryValidation.ok
-  ✅ offline tests + run_m6_smoke_offline.py PASS
-  ✅ Fusion m6_connect_smoke.py PASS (7/7 steps, Fusion 2703.1.20)
+  ✅ offline + Fusion via connect_pipeline_smoke (M6–M9 unified)
   ✅ relationshipDeclarations embedded in Overhead generator JSON output
   ✅ assembly component attribute + reconcile loads embedded declarations
 
@@ -1032,8 +1035,10 @@ Only move to next generator after the previous one passes smoke tests.
 ## Status
 
 ```text
-❌ Not started
+✅ SEALED (2026-07-05)
 ```
+
+Checklist: docs/connect-m7-formal-ui-checklist.md
 
 ## Goal
 
@@ -1100,12 +1105,12 @@ cut_approved:
 ## Status
 
 ```text
-❌ Not started
+✅ SEALED (2026-07-05)
 ```
 
-## Goal
+Checklist: docs/connect-m8-panel-metadata-writeback-checklist.md
 
-After cut feature metadata is stable, synchronize machining features back to body-level panel metadata.
+## Goal
 
 ## Current M3 Writeback
 
@@ -1167,8 +1172,10 @@ Potential feature record:
 ## Status
 
 ```text
-❌ Not started
+✅ SEALED (v1 scaffold — 2026-07-05)
 ```
+
+Checklist: docs/connect-m9-hardware-types-checklist.md
 
 ## Goal
 
@@ -1225,26 +1232,28 @@ If any answer violates the global rules, stop and ask for clarification.
 
 # Immediate Next Task
 
-The next active milestone is:
+The Connect M6–M9 pipeline is sealed. Next work is post-M9 implementation of additional hardware types and generator extensions.
 
-```text
-Milestone 7 — Formal Connect UI
+Unified verification:
+
+```powershell
+# Terminal (offline M6–M9)
+cd fusion360-unified-cabinet-plugin
+python tests/run_connect_pipeline_smoke_offline.py
+
+# Fusion — install once, then Run in Scripts and Add-Ins
+powershell -ExecutionPolicy Bypass -File scripts/install_connect_pipeline_smoke.ps1
+# → connect_pipeline_smoke
 ```
 
-M1–M6 are complete and sealed.
+M7 reference (sealed):
+- Checklist: docs/connect-m7-formal-ui-checklist.md
 
-M6 reference (sealed):
-- Checklist: docs/connect-m6-generator-declared-checklist.md
-- Fusion runner: m6_connect_smoke.py
-- Offline runner: tests/run_m6_smoke_offline.py
+M8 reference (sealed):
+- Checklist: docs/connect-m8-panel-metadata-writeback-checklist.md
 
-Do **not** start M7 until product UI requirements are agreed; M6 General Tall extension can proceed in parallel if needed.
-
-M5 reference (sealed, smoke scripts removed):
-- Checklist: docs/connect-m5-face-verification-checklist.md
-- Feature routes: verifySelectedPairFaces, face_verified cut gate
-
-Do **not** start M7 formal UI until M6 is sealed.
+M9 reference (sealed):
+- Checklist: docs/connect-m9-hardware-types-checklist.md
 
 M6 reference (sealed):
 - Checklist: docs/connect-m6-generator-declared-checklist.md
@@ -1263,5 +1272,5 @@ M4.6A reference (sealed):
 M5 scope (active):
 - Upgrade selected pair verification from bbox/AABB to face-level contact
 - New verification level: `face_verified`
-- Runners: `tests/run_m5_smoke_offline.py`, `m5_connect_smoke.py` (Fusion)
+- Runners: `tests/run_connect_pipeline_smoke_offline.py`, `connect_pipeline_smoke.py` (Fusion)
 - See Milestone 5 section below

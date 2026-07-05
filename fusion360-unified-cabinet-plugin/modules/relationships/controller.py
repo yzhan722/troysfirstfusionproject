@@ -315,6 +315,77 @@ class RelationshipsController:
                 "trace": traceback.format_exc(),
             }
 
+    def connect_list(self, payload, _palette):
+        try:
+            import importlib
+
+            import connect_formal_ui
+
+            connect_formal_ui = importlib.reload(connect_formal_ui)
+            tolerance_mm = self._float_param(payload, "toleranceMm", 0.5)
+            include_none = bool((payload or {}).get("includeNone"))
+            scan_result = (payload or {}).get("scanResult") if isinstance(payload, dict) else None
+            if not isinstance(scan_result, dict):
+                scan_result = self.service.scan(
+                    scope=str((payload or {}).get("scope") or "all"),
+                    tolerance_mm=tolerance_mm,
+                    include_none=include_none,
+                )
+            declared_relationships = None
+            if isinstance(payload, dict):
+                reconcile_result = payload.get("reconcileResult")
+                if isinstance(reconcile_result, dict):
+                    declared_relationships = reconcile_result.get("declaredRelationships")
+                if declared_relationships is None:
+                    declared_relationships = payload.get("declaredRelationships")
+            if declared_relationships:
+                scan_result = connect_formal_ui.merge_declared_relationships_into_scan(
+                    scan_result,
+                    declared_relationships if isinstance(declared_relationships, list) else None,
+                )
+            filters = (payload or {}).get("filters") if isinstance(payload, dict) else None
+            selected_id = str((payload or {}).get("selectedRelationshipId") or "").strip() or None
+            view = connect_formal_ui.build_connect_view_model(
+                scan_result,
+                filters=filters if isinstance(filters, dict) else {},
+                selected_relationship_id=selected_id,
+            )
+            view["scan"] = scan_result
+            return "connectListResult", view
+        except Exception as ex:
+            return "connectListResult", {
+                "ok": False,
+                "action": "relationships.connectList",
+                "errors": [str(ex)],
+                "trace": traceback.format_exc(),
+            }
+
+    def connect_execute(self, payload, _palette):
+        try:
+            import importlib
+
+            import connect_formal_ui
+
+            connect_formal_ui = importlib.reload(connect_formal_ui)
+            action = str((payload or {}).get("action") or "").strip()
+            relationship = (payload or {}).get("relationship") if isinstance(payload, dict) else None
+            gate = connect_formal_ui.evaluate_connect_action(action, relationship)
+            result = dict(gate)
+            result["action"] = "relationships.connectExecute"
+            result["requestedAction"] = action
+            if gate.get("ok") and action in ("confirm", "confirm_for_cut"):
+                confirmed = gate.get("confirmedRelationship") or relationship
+                result["confirmedRelationship"] = confirmed
+                result["relationship"] = confirmed
+            return "connectExecuteResult", result
+        except Exception as ex:
+            return "connectExecuteResult", {
+                "ok": False,
+                "action": "relationships.connectExecute",
+                "errors": [str(ex)],
+                "trace": traceback.format_exc(),
+            }
+
     def _show_relationship_overlay(self, payload, *, action: str):
         try:
             from relationship_visual_overlay_selfcheck import load_overlay_fusion_module
