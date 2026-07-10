@@ -19,7 +19,8 @@ from relationship_models import (
     make_relationship_id,
 )
 
-CONTACT_TOLERANCE_MM = 0.5
+# Shop rule: gaps of 1mm or less count as contact (assembly / machining clearance).
+CONTACT_TOLERANCE_MM = 1.0
 MIN_OVERLAP_MM = 1.0
 GAP_PARALLEL_MAX_MM = 20.0
 THICKNESS_RATIO_TOLERANCE = 0.35

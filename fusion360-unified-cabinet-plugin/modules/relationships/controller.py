@@ -7,6 +7,7 @@ import traceback
 from typing import Any, Dict
 
 from relationship_fixtures import create_relationship_test_fixture, evaluate_fixture_expectations, expected_fixture_cases
+from relationship_geometry import CONTACT_TOLERANCE_MM
 from relationship_service import RelationshipService
 
 
@@ -25,7 +26,7 @@ class RelationshipsController:
 
     def scan(self, payload, _palette):
         try:
-            tolerance_mm = self._float_param(payload, "toleranceMm", 0.5)
+            tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
             include_none = bool(payload.get("includeNone")) if isinstance(payload, dict) else False
             expected = payload.get("expectedFixtures") if isinstance(payload, dict) else None
             report = self.service.scan(
@@ -45,7 +46,7 @@ class RelationshipsController:
 
     def scan_selected(self, payload, _palette):
         try:
-            tolerance_mm = self._float_param(payload, "toleranceMm", 0.5)
+            tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
             include_none = bool(payload.get("includeNone")) if isinstance(payload, dict) else False
             selected = self._selected_bodies()
             report = self.service.scan_selected(
@@ -89,7 +90,7 @@ class RelationshipsController:
         try:
             from relationship_service import build_panel_snapshot, is_panel_body
 
-            tolerance_mm = self._float_param(payload, "toleranceMm", 0.5)
+            tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
             include_none = bool(payload.get("includeNone")) if isinstance(payload, dict) else False
             selected = self._selected_bodies()
             panel_bodies = [body for body in (selected or []) if is_panel_body(body)]
@@ -144,7 +145,7 @@ class RelationshipsController:
                     "action": "relationships.inspectPair",
                     "errors": ["panelAId and panelBId are required."],
                 }
-            tolerance_mm = self._float_param(payload, "toleranceMm", 0.5)
+            tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
             report = self.service.inspect_pair_from_design(
                 panel_a_id,
                 panel_b_id,
@@ -183,7 +184,7 @@ class RelationshipsController:
             from contact_patch_overlay_fusion import CONTACT_PATCH_FUSION_BUILD, create_contact_patch_overlay
             from relationship_service import build_panel_snapshot, is_panel_body
 
-            tolerance_mm = self._float_param(payload, "toleranceMm", 0.5)
+            tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
             selected = self._selected_bodies()
             panel_bodies = [body for body in (selected or []) if is_panel_body(body)]
             if len(panel_bodies) != 2:
@@ -272,7 +273,7 @@ class RelationshipsController:
         try:
             from relationship_service import build_panel_snapshot, is_panel_body
 
-            tolerance_mm = self._float_param(payload, "toleranceMm", 0.5)
+            tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
             selected = self._selected_bodies()
             panel_bodies = [body for body in (selected or []) if is_panel_body(body)]
             if len(panel_bodies) != 2:
@@ -337,7 +338,7 @@ class RelationshipsController:
             from face_verification_fusion import extract_faces_for_panel
             from relationship_service import build_panel_snapshot, is_panel_body
 
-            tolerance_mm = self._float_param(payload, "toleranceMm", 0.5)
+            tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
             selected = self._selected_bodies()
             panel_bodies = [body for body in (selected or []) if is_panel_body(body)]
             if len(panel_bodies) != 2:
@@ -409,7 +410,7 @@ class RelationshipsController:
             importlib.reload(generator_declared_service)
             reconcile_fn = generator_declared_service.reconcile_generator_declarations
 
-            tolerance_mm = self._float_param(payload, "toleranceMm", 0.5)
+            tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
             generator = str((payload or {}).get("generator") or "overhead").strip() or None
             preferred_run = str((payload or {}).get("runLabel") or (payload or {}).get("preferredRunToken") or "").strip() or None
             assembly_name = str((payload or {}).get("assemblyComponentName") or "").strip() or None
@@ -455,7 +456,7 @@ class RelationshipsController:
             import connect_formal_ui
 
             connect_formal_ui = importlib.reload(connect_formal_ui)
-            tolerance_mm = self._float_param(payload, "toleranceMm", 0.5)
+            tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
             include_none = bool((payload or {}).get("includeNone"))
             scan_result = (payload or {}).get("scanResult") if isinstance(payload, dict) else None
             if not isinstance(scan_result, dict):
@@ -641,7 +642,7 @@ class RelationshipsController:
                 warnings.append("Fixture bodies were created, but automatic viewport fit failed: {}".format(ex))
             if selected_bodies:
                 warnings.append("Viewport fitted to {} fixture body/bodies.".format(selected_bodies))
-            tolerance_mm = self._float_param(payload, "toleranceMm", 0.5)
+            tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
             created_panel_ids = {item["panelId"] for item in created}
             panels = [
                 panel

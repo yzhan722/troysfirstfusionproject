@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from relationship_geometry import classify_pair, enrich_panel_snapshot
+from relationship_geometry import CONTACT_TOLERANCE_MM, classify_pair, enrich_panel_snapshot
 from relationship_models import BBoxMm, PanelSnapshot
 from relationship_report import build_inspect_pair_report, build_scan_report
 
@@ -319,7 +319,7 @@ def read_relationship_declarations_from_component(component) -> List[Dict[str, A
 def scan_relationships(
     panels: Iterable[PanelSnapshot],
     *,
-    tolerance_mm: float = 0.5,
+    tolerance_mm: float = CONTACT_TOLERANCE_MM,
     include_none: bool = False,
 ):
     panel_list = list(panels)
@@ -336,7 +336,7 @@ def inspect_pair(
     panel_a: PanelSnapshot,
     panel_b: PanelSnapshot,
     *,
-    tolerance_mm: float = 0.5,
+    tolerance_mm: float = CONTACT_TOLERANCE_MM,
 ):
     relationship = classify_pair(panel_a, panel_b, tolerance_mm=tolerance_mm)
     return build_inspect_pair_report(relationship=relationship, tolerance_mm=tolerance_mm)
@@ -374,7 +374,7 @@ class RelationshipService:
         self,
         *,
         scope: str = "all",
-        tolerance_mm: float = 0.5,
+        tolerance_mm: float = CONTACT_TOLERANCE_MM,
         include_none: bool = False,
         expected_fixtures: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
@@ -397,7 +397,7 @@ class RelationshipService:
         self,
         selected_bodies: List[Any],
         *,
-        tolerance_mm: float = 0.5,
+        tolerance_mm: float = CONTACT_TOLERANCE_MM,
         include_none: bool = False,
     ) -> Dict[str, Any]:
         panel_bodies = [body for body in (selected_bodies or []) if is_panel_body(body)]
@@ -430,7 +430,7 @@ class RelationshipService:
         panel_a_id: str,
         panel_b_id: str,
         *,
-        tolerance_mm: float = 0.5,
+        tolerance_mm: float = CONTACT_TOLERANCE_MM,
     ) -> Dict[str, Any]:
         panel_map = {panel.panelId: panel for panel in panels}
         panel_a = panel_map.get(panel_a_id)
@@ -448,7 +448,7 @@ class RelationshipService:
         panel_a_id: str,
         panel_b_id: str,
         *,
-        tolerance_mm: float = 0.5,
+        tolerance_mm: float = CONTACT_TOLERANCE_MM,
     ) -> Dict[str, Any]:
         panels = self.collect_panels_from_design()
         return self.inspect_pair_by_id(panels, panel_a_id, panel_b_id, tolerance_mm=tolerance_mm)

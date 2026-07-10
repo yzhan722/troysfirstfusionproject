@@ -10,6 +10,7 @@ from overhead_declared_relationships import (
     detect_overhead_generator,
     resolve_declarations_for_panels,
 )
+from relationship_geometry import CONTACT_TOLERANCE_MM
 from relationship_models import PanelSnapshot
 from relationship_service import dedupe_panel_snapshots, scan_relationships
 
@@ -65,7 +66,7 @@ def reconcile_generator_declarations(
     panels: List[PanelSnapshot],
     *,
     generator: Optional[str] = None,
-    tolerance_mm: float = 0.5,
+    tolerance_mm: float = CONTACT_TOLERANCE_MM,
     include_none: bool = False,
     preferred_run_token: Optional[str] = None,
     embedded_declarations: Optional[List[Dict[str, Any]]] = None,

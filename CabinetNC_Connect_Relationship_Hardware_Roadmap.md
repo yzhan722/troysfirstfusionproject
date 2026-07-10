@@ -1275,6 +1275,7 @@ Post-M9 scaffold hardware lane is complete.
 
 **Relationship-truth follow-up (2026-07-10):**
 - Overhead BP↔FP0 face verify already sealed in Fusion Batch C; offline golden now asserts `face_verified` too.
+- **Shop contact rule:** separation ≤ **1.0 mm** counts as contact (`CONTACT_TOLERANCE_MM`); gap_parallel starts above 1mm.
 - Remaining truth gaps: BRep face-bounds refinement; `generator_declared` on General Tall / Kitchen.
 
 Next options:

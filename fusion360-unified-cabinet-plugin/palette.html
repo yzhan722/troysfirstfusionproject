@@ -11350,7 +11350,7 @@
     function connectUiScan() {
       connectContactState.confirmedRelationship = null;
       connectUiSetMessage("正在扫描全部板件关系…");
-      fusionSend("relationships.scan", { scope: "all", toleranceMm: 0.5 });
+      fusionSend("relationships.scan", { scope: "all", toleranceMm: 1.0 });
     }
 
     function connectUiInspectSelected() {
@@ -11358,7 +11358,7 @@
       connectUiClearPreviewResult();
       connectUiClearCutResult();
       connectUiSetMessage("正在检查 Fusion 中选中的板件对…");
-      fusionSend("relationships.inspectSelected", { toleranceMm: 0.5 });
+      fusionSend("relationships.inspectSelected", { toleranceMm: 1.0 });
     }
 
     function connectUiProbeSelection() {
@@ -11368,7 +11368,7 @@
 
     function connectUiShowContactPatch() {
       connectUiSetMessage("正在 Fusion 中显示接触面 overlay…");
-      fusionSend("relationships.showContactPatchOverlayForSelected", { toleranceMm: 0.5 });
+      fusionSend("relationships.showContactPatchOverlayForSelected", { toleranceMm: 1.0 });
     }
 
     function connectUiClearContactPatch() {
@@ -11405,7 +11405,7 @@
       }
       connectUiSetMessage("正在验证选中板对的面接触…");
       connectUiSetOperation("面验证计算中…", "warn");
-      fusionSend("relationships.verifySelectedPairFaces", { toleranceMm: 0.5 });
+      fusionSend("relationships.verifySelectedPairFaces", { toleranceMm: 1.0 });
     }
 
     function connectUiCut() {
@@ -11993,7 +11993,7 @@
 
     function hwRelDebugReconcileOverheadDeclarations() {
       hwRelDebugSetMessage("正在 Reconcile Overhead 生成器声明… / Reconciling Overhead generator-declared relationships...");
-      fusionSend("relationships.reconcileGeneratorDeclarations", { generator: "overhead", toleranceMm: 0.5 });
+      fusionSend("relationships.reconcileGeneratorDeclarations", { generator: "overhead", toleranceMm: 1.0 });
     }
 
     function hwRelDebugHandleDeclaredResult(parsed) {
@@ -12024,7 +12024,7 @@
 
     function hwRelDebugVerifySelectedPairFaces() {
       hwRelDebugSetMessage("正在验证选中板对的面接触… / Verifying face contact for selected pair...");
-      fusionSend("relationships.verifySelectedPairFaces", { toleranceMm: 0.5 });
+      fusionSend("relationships.verifySelectedPairFaces", { toleranceMm: 1.0 });
     }
 
     function hwRelDebugHandleFaceVerifyResult(parsed) {
@@ -12060,7 +12060,7 @@
 
     function hwRelDebugShowOverlayForSelectedPair() {
       hwRelDebugSetMessage("正在检查选中对并显示关系叠加… / Inspecting selected pair and showing overlay...");
-      fusionSend("relationships.showRelationshipOverlayForSelected", { toleranceMm: 0.5 });
+      fusionSend("relationships.showRelationshipOverlayForSelected", { toleranceMm: 1.0 });
     }
 
     function hwRelDebugClearRelationshipOverlays() {
@@ -12091,17 +12091,17 @@
 
     function hwRelDebugCreateFixture() {
       hwRelDebugSetMessage("正在创建关系测试夹具… / Creating relationship test fixture...");
-      fusionSend("relationships.createTestFixture", { toleranceMm: 0.5 });
+      fusionSend("relationships.createTestFixture", { toleranceMm: 1.0 });
     }
 
     function hwRelDebugScan() {
       hwRelDebugSetMessage("正在扫描全部板件关系… / Scanning all panel relationships...");
-      fusionSend("relationships.scan", { scope: "all", toleranceMm: 0.5 });
+      fusionSend("relationships.scan", { scope: "all", toleranceMm: 1.0 });
     }
 
     function hwRelDebugInspectSelected() {
       hwRelDebugSetMessage("正在检查选中的板件实体… / Inspecting selected panel bodies...");
-      fusionSend("relationships.inspectSelected", { toleranceMm: 0.5 });
+      fusionSend("relationships.inspectSelected", { toleranceMm: 1.0 });
     }
 
     function hwRelDebugPreviewScrewHoles() {

@@ -70,6 +70,55 @@ class RelationshipClassificationTests(unittest.TestCase):
         self.assertEqual(rel.geometryType, "gap_parallel")
         self.assertEqual(rel.relationshipType, "door_to_carcass_candidate")
 
+    def test_near_contact_within_one_mm_is_contact(self):
+        """Shop rule: separation <= 1mm counts as contact, not gap_parallel."""
+        from relationship_geometry import CONTACT_TOLERANCE_MM
+
+        self.assertEqual(CONTACT_TOLERANCE_MM, 1.0)
+        z = 12000.0
+        surface = _panel(
+            "NEAR_SURFACE",
+            BBoxMm(0, 300, 0, 300, z, z + 16),
+            board_type="carcass_panel",
+            thickness_axis="Z",
+            thickness_mm=16,
+        )
+        # Edge board sits 1.0mm past the surface face (Y gap = 1.0).
+        edge = _panel(
+            "NEAR_EDGE",
+            BBoxMm(0, 300, 301, 316, z, z + 300),
+            board_type="structural_edge",
+            thickness_axis="Y",
+            thickness_mm=15,
+        )
+        rel = classify_pair(edge, surface)
+        self.assertEqual(rel.geometryType, "edge_to_surface")
+        self.assertLessEqual(rel.contact.distanceMm, CONTACT_TOLERANCE_MM)
+        self.assertEqual(rel.contact.distanceMm, 1.0)
+
+    def test_gap_just_over_one_mm_is_gap_parallel(self):
+        z = 12000.0
+        door = _panel(
+            "GAP_A",
+            BBoxMm(1000, 1300, 0, 300, z, z + 16),
+            board_type="door_panel",
+            role="door",
+            thickness_axis="Z",
+            thickness_mm=16,
+        )
+        # 1.01mm clearance — must remain gap, not contact.
+        carcass = _panel(
+            "GAP_B",
+            BBoxMm(1000, 1300, 0, 300, z + 17.01, z + 33.01),
+            board_type="carcass_side",
+            role="carcass",
+            thickness_axis="Z",
+            thickness_mm=16,
+        )
+        rel = classify_pair(door, carcass)
+        self.assertEqual(rel.geometryType, "gap_parallel")
+        self.assertGreater(rel.contact.distanceMm, 1.0)
+
     def test_intersection_classification(self):
         z = 12000.0
         a = _panel("REL_COLLISION_A", BBoxMm(1500, 1800, 0, 300, z, z + 200))

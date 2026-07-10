@@ -6,6 +6,7 @@ import json
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from relationship_geometry import CONTACT_TOLERANCE_MM
 from relationship_models import BBoxMm, PanelSnapshot
 from relationship_service import build_panel_snapshot_from_dict, scan_relationships
 
@@ -222,7 +223,7 @@ def build_fixture_snapshots() -> List[PanelSnapshot]:
 
 def evaluate_fixture_expectations(
     *,
-    tolerance_mm: float = 0.5,
+    tolerance_mm: float = CONTACT_TOLERANCE_MM,
     include_none: bool = True,
 ) -> Dict[str, Any]:
     panels = build_fixture_snapshots()

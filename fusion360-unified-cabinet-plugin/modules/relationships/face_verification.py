@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from relationship_models import (
     upgrade_relationship_with_face_verification,
 )
+from relationship_geometry import CONTACT_TOLERANCE_MM
 
 FACE_CLASS_SURFACE = "SURFACE"
 FACE_CLASS_EDGE = "EDGE"
@@ -179,7 +180,7 @@ def verify_pair_faces(
     faces_a: List[Dict[str, Any]],
     faces_b: List[Dict[str, Any]],
     *,
-    tolerance_mm: float = 0.5,
+    tolerance_mm: float = CONTACT_TOLERANCE_MM,
     min_projected_overlap_mm: float = MIN_PROJECTED_OVERLAP_MM,
     min_contact_area_mm2: float = MIN_CONTACT_AREA_MM2,
 ) -> Dict[str, Any]:
@@ -308,7 +309,7 @@ def verify_fixture_pair_offline(
     panel_b: Dict[str, Any],
     relationship: Dict[str, Any],
     *,
-    tolerance_mm: float = 0.5,
+    tolerance_mm: float = CONTACT_TOLERANCE_MM,
 ) -> Dict[str, Any]:
     faces_a = extract_axis_aligned_faces_from_panel(panel_a)
     faces_b = extract_axis_aligned_faces_from_panel(panel_b)

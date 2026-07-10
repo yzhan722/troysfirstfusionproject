@@ -74,6 +74,40 @@ class FaceVerificationTests(unittest.TestCase):
         report = verify_fixture_pair_offline(panel_a, panel_b, rel)
         self.assertFalse(report["ok"])
 
+    def test_near_contact_one_mm_passes_face_verification(self):
+        """Face verify uses the same shop contact tolerance (≤1mm)."""
+        from relationship_geometry import CONTACT_TOLERANCE_MM
+        from relationship_models import BBoxMm, PanelSnapshot
+
+        z = 12000.0
+        surface = PanelSnapshot(
+            panelId="NEAR_SURFACE",
+            bodyName="NEAR_SURFACE",
+            bbox=BBoxMm(0, 300, 0, 300, z, z + 16),
+            boardType="carcass_panel",
+            sizeX=300,
+            sizeY=300,
+            sizeZ=16,
+            thicknessAxis="Z",
+            thicknessMm=16,
+        )
+        edge = PanelSnapshot(
+            panelId="NEAR_EDGE",
+            bodyName="NEAR_EDGE",
+            bbox=BBoxMm(0, 300, 301, 316, z, z + 300),
+            boardType="structural_edge",
+            sizeX=300,
+            sizeY=15,
+            sizeZ=300,
+            thicknessAxis="Y",
+            thicknessMm=15,
+        )
+        rel = classify_pair(edge, surface).to_dict()
+        self.assertEqual(rel["geometryType"], "edge_to_surface")
+        report = verify_fixture_pair_offline(edge.to_dict(), surface.to_dict(), rel)
+        self.assertTrue(report["ok"], report.get("errors"))
+        self.assertLessEqual(float(report["faceMatch"]["planeDistanceMm"]), CONTACT_TOLERANCE_MM)
+
     def test_intersection_fixture_rejected(self):
         rel = self._fixture_relationship("intersection_collision_001")
         panel_a = self._fixture_panel_dict("REL_COLLISION_A")
