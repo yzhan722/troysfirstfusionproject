@@ -321,3 +321,170 @@ def verify_fixture_pair_offline(
         faces_b,
         tolerance_mm=tolerance_mm,
     )
+
+
+# --- Batch auto face-verify (3a): bbox_candidate → face_verified; skip + remind ---
+
+BATCH_VERIFY_ACTION = "relationships.verifyAllBboxCandidates"
+DEFAULT_BATCH_MAX_PAIRS = 200
+BATCH_GEOMETRY_TYPE = "edge_to_surface"
+BATCH_RELATIONSHIP_TYPE = "structural_butt_joint"
+
+
+def _relationship_panel_ids(relationship: Dict[str, Any]) -> Tuple[str, str]:
+    panel_a = relationship.get("panelA") or {}
+    panel_b = relationship.get("panelB") or {}
+    return (
+        str(panel_a.get("panelId") or "").strip(),
+        str(panel_b.get("panelId") or "").strip(),
+    )
+
+
+def filter_face_verifiable_candidates(
+    relationships: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Phase-1 batch filter: bbox_candidate + edge_to_surface + structural_butt_joint."""
+    accepted: List[Dict[str, Any]] = []
+    for relationship in relationships or []:
+        if not isinstance(relationship, dict):
+            continue
+        verification = relationship.get("verification") or {}
+        level = str(verification.get("level") or "bbox_candidate")
+        if level != "bbox_candidate":
+            continue
+        if str(relationship.get("geometryType") or "") != BATCH_GEOMETRY_TYPE:
+            continue
+        if str(relationship.get("relationshipType") or "") != BATCH_RELATIONSHIP_TYPE:
+            continue
+        accepted.append(relationship)
+    return accepted
+
+
+def _skip_reason_from_verify_errors(errors: List[str]) -> str:
+    text = " ".join(errors).lower()
+    if "body_not_found" in text or "body not found" in text:
+        return "body_not_found"
+    if "geometry type" in text or "supports" in text:
+        return "geometry_not_supported"
+    if "contact-axis faces" in text:
+        return "face_extract_failed"
+    if "opposing contact face" in text or "overlap" in text:
+        return "no_opposing_faces"
+    if "face-class" in text or "class" in text:
+        return "class_mismatch"
+    if "contact axis" in text:
+        return "geometry_not_supported"
+    return "no_opposing_faces"
+
+
+def _reminder_lines(verified_count: int, skipped: List[Dict[str, Any]], *, capped: bool) -> List[str]:
+    lines: List[str] = []
+    if verified_count:
+        lines.append("已自动验证 {} 对接头，可切削。".format(verified_count))
+    if skipped:
+        lines.append("跳过 {} 对（见列表），请检查或改选手动面验证。".format(len(skipped)))
+    if capped:
+        lines.append("已达本批上限，请缩小装配范围后重试。")
+    if not verified_count and not skipped:
+        lines.append("没有可自动面验证的 bbox 候选（需边对面结构对接）。")
+    return lines
+
+
+def verify_all_bbox_candidates(
+    relationships: List[Dict[str, Any]],
+    panel_snapshots: Dict[str, Dict[str, Any]],
+    *,
+    tolerance_mm: float = CONTACT_TOLERANCE_MM,
+    max_pairs: int = DEFAULT_BATCH_MAX_PAIRS,
+    extract_faces=None,
+) -> Dict[str, Any]:
+    """Offline/batch core: verify filtered bbox candidates; skip failures; never relax cut gate.
+
+    extract_faces(panel_dict) -> faces[]; defaults to axis-aligned bbox faces (offline).
+    Fusion controller injects BRep extraction later.
+    """
+    extract = extract_faces or extract_axis_aligned_faces_from_panel
+    panels = panel_snapshots if isinstance(panel_snapshots, dict) else {}
+    candidates = filter_face_verifiable_candidates(list(relationships or []))
+    limit = max(0, int(max_pairs if max_pairs is not None else DEFAULT_BATCH_MAX_PAIRS))
+    capped = len(candidates) > limit
+    to_process = candidates[:limit] if limit else []
+    overflow = candidates[limit:] if capped else []
+
+    verified: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+
+    def _skip(rel: Dict[str, Any], reason: str, errors: Optional[List[str]] = None) -> None:
+        panel_a_id, panel_b_id = _relationship_panel_ids(rel)
+        skipped.append(
+            {
+                "relationshipId": str(rel.get("relationshipId") or ""),
+                "panelA": panel_a_id,
+                "panelB": panel_b_id,
+                "reason": reason,
+                "errors": list(errors or []),
+            }
+        )
+
+    for rel in overflow:
+        _skip(rel, "cap_reached", ["Batch maxPairs={} exceeded.".format(limit)])
+
+    for rel in to_process:
+        panel_a_id, panel_b_id = _relationship_panel_ids(rel)
+        if not panel_a_id or not panel_b_id:
+            _skip(rel, "panel_missing", ["Relationship panel ids are incomplete."])
+            continue
+        panel_a = panels.get(panel_a_id)
+        panel_b = panels.get(panel_b_id)
+        if not isinstance(panel_a, dict) or not isinstance(panel_b, dict):
+            _skip(
+                rel,
+                "panel_missing",
+                ["Missing panel snapshot for {} / {}.".format(panel_a_id, panel_b_id)],
+            )
+            continue
+        try:
+            faces_a = list(extract(panel_a) or [])
+            faces_b = list(extract(panel_b) or [])
+        except Exception as ex:
+            errors = [str(ex)]
+            _skip(rel, _skip_reason_from_verify_errors(errors), errors)
+            continue
+        if not faces_a or not faces_b:
+            _skip(rel, "face_extract_failed", ["No faces extracted for one or both panels."])
+            continue
+        report = verify_pair_faces(
+            rel,
+            panel_a,
+            panel_b,
+            faces_a,
+            faces_b,
+            tolerance_mm=tolerance_mm,
+        )
+        if not report.get("ok"):
+            errors = list(report.get("errors") or [])
+            _skip(rel, _skip_reason_from_verify_errors(errors), errors)
+            continue
+        try:
+            upgraded = apply_face_verification_to_relationship(rel, report)
+        except Exception as ex:
+            _skip(rel, "no_opposing_faces", [str(ex)])
+            continue
+        verified.append(upgraded)
+
+    return {
+        "ok": True,
+        "action": BATCH_VERIFY_ACTION,
+        "cutGateUnchanged": True,
+        "toleranceMm": float(tolerance_mm),
+        "maxPairs": limit,
+        "candidateCount": len(candidates),
+        "processedCount": len(to_process),
+        "verifiedCount": len(verified),
+        "skippedCount": len(skipped),
+        "verifiedRelationships": verified,
+        "skipped": skipped,
+        "reminders": _reminder_lines(len(verified), skipped, capped=capped),
+        "errors": [],
+        "warnings": [],
+    }

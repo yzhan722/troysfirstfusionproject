@@ -397,6 +397,106 @@ class RelationshipsController:
                 "trace": traceback.format_exc(),
             }
 
+    def verify_all_bbox_candidates(self, payload, _palette):
+        """Batch face-verify filtered bbox candidates; skip failures; never relax cut gate."""
+        try:
+            from face_verification import (
+                BATCH_VERIFY_ACTION,
+                DEFAULT_BATCH_MAX_PAIRS,
+                verify_all_bbox_candidates as run_batch_verify,
+            )
+            from face_verification_fusion import extract_faces_for_panel
+            from relationship_service import (
+                build_panel_snapshot,
+                collect_panel_bodies,
+                collect_panel_bodies_under_assembly,
+                scan_relationships,
+            )
+            from relationship_report import build_scan_report
+
+            tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
+            try:
+                max_pairs = int((payload or {}).get("maxPairs", DEFAULT_BATCH_MAX_PAIRS))
+            except Exception:
+                max_pairs = DEFAULT_BATCH_MAX_PAIRS
+            assembly_name = str((payload or {}).get("assemblyComponentName") or "").strip() or None
+            # physical: face verify must match Fusion body space (designGeometry goes stale after moves)
+            bbox_source = str((payload or {}).get("bboxSource") or "physical").strip() or "physical"
+
+            root = self.service._root_component()
+            if not root:
+                return "relationshipFaceVerifyBatchResult", {
+                    "ok": False,
+                    "action": BATCH_VERIFY_ACTION,
+                    "errors": ["No active Fusion design."],
+                }
+
+            if assembly_name:
+                bodies = collect_panel_bodies_under_assembly(root, assembly_name)
+            else:
+                bodies = collect_panel_bodies(root)
+
+            body_by_id = {}
+            panels = []
+            for body in bodies or []:
+                snap = build_panel_snapshot(body, bbox_source=bbox_source)
+                panel_id = str(getattr(snap, "panelId", "") or "").strip()
+                if not panel_id or panel_id in body_by_id:
+                    continue
+                body_by_id[panel_id] = body
+                panels.append(snap)
+
+            if len(panels) < 2:
+                return "relationshipFaceVerifyBatchResult", {
+                    "ok": False,
+                    "action": BATCH_VERIFY_ACTION,
+                    "panelCount": len(panels),
+                    "reminders": ["可扫描面板不足，无法批量面验证。请确认板件已挂面板元数据。"],
+                    "errors": ["Need at least 2 panel bodies to batch face-verify."],
+                }
+
+            panel_list, relationships = scan_relationships(
+                panels,
+                tolerance_mm=tolerance_mm,
+                include_none=False,
+            )
+            panel_map = {panel.panelId: panel.to_dict() for panel in panel_list}
+            rel_dicts = [rel.to_dict() for rel in relationships]
+
+            def extract_faces(panel_dict):
+                panel_id = str((panel_dict or {}).get("panelId") or "").strip()
+                body = body_by_id.get(panel_id)
+                if body is None:
+                    raise RuntimeError("body_not_found: {}".format(panel_id))
+                return extract_faces_for_panel(body, panel_dict)
+
+            report = run_batch_verify(
+                rel_dicts,
+                panel_map,
+                tolerance_mm=tolerance_mm,
+                max_pairs=max_pairs,
+                extract_faces=extract_faces,
+            )
+            report["panelCount"] = len(panel_list)
+            report["relationshipCount"] = len(rel_dicts)
+            report["assemblyComponentName"] = assembly_name
+            report["bboxSource"] = bbox_source
+            report["scan"] = build_scan_report(
+                action="relationships.scan",
+                panels=panel_list,
+                relationships=relationships,
+                scope="assembly" if assembly_name else "all",
+                tolerance_mm=tolerance_mm,
+            )
+            return "relationshipFaceVerifyBatchResult", report
+        except Exception as ex:
+            return "relationshipFaceVerifyBatchResult", {
+                "ok": False,
+                "action": "relationships.verifyAllBboxCandidates",
+                "errors": [str(ex)],
+                "trace": traceback.format_exc(),
+            }
+
     def reconcile_generator_declarations(self, payload, _palette):
         try:
             import importlib

@@ -2269,9 +2269,14 @@
                 </div>
                 <div class="connect-actions" style="margin-top:8px;">
                   <button type="button" class="ghost" id="connectScanBtn">扫描全部关系</button>
+                  <button type="button" class="ghost" id="connectVerifyAllBtn">验证全部候选</button>
                   <button type="button" class="ghost" id="connectShowContactPatchBtn" disabled>显示接触面</button>
                   <button type="button" class="ghost" id="connectClearContactPatchBtn">清除接触面</button>
                 </div>
+                <details class="connect-more" id="connectBatchSkipDetails" hidden>
+                  <summary>批量验证跳过列表</summary>
+                  <pre id="connectBatchSkipList" class="connect-batch-skip-list" style="white-space:pre-wrap;margin:8px 0 0;font-size:12px;"></pre>
+                </details>
               </details>
             </div>
 
@@ -2292,7 +2297,7 @@
               </div>
               <div class="connect-detail-grid" id="connectHardwareParams" style="margin-bottom: 10px;"></div>
               <div class="hardware-section-note" id="connectVerifyHint" style="margin-bottom:8px;">
-                验证优先：生成器声明（检查后自动同步）→ 面验证 →（调试）手动确认。≤1mm 近接触视为可切接触。
+                验证优先：生成器声明（检查后自动同步）→ 面验证 /「验证全部候选」→（调试）手动确认。≤1mm 近接触视为可切接触。批量结果仅本次会话有效。
               </div>
               <div class="connect-actions">
                 <button type="button" class="ghost" id="connectPreviewBtn" disabled>预览</button>
@@ -8761,6 +8766,8 @@
             hwRelDebugHandleOverlayResult(parsed);
           } else if (action === "relationshipFaceVerifyResult") {
             connectUiHandleFaceVerifyResult(parsed);
+          } else if (action === "relationshipFaceVerifyBatchResult") {
+            connectUiHandleFaceVerifyBatchResult(parsed);
           } else if (action === "relationshipDeclaredResult") {
             connectUiHandleDeclaredResult(parsed);
           } else if (action === "connectExecuteResult") {
@@ -11003,6 +11010,18 @@
       lastScanCount: null,
       pendingAutoReconcile: false,
       selectedPanelIds: [],
+      lastBatchVerify: null,
+      verifiedRelationships: [],
+    };
+
+    const CONNECT_BATCH_SKIP_LABELS = {
+      panel_missing: "缺少面板快照",
+      body_not_found: "找不到实体",
+      face_extract_failed: "无法提取对接面",
+      no_opposing_faces: "未找到相对面/重叠不足",
+      class_mismatch: "边/面类型不匹配",
+      geometry_not_supported: "几何类型不支持",
+      cap_reached: "超过本批上限",
     };
 
     const CONNECT_HW_RULES = {
@@ -11627,6 +11646,30 @@
       fusionSend("relationships.verifySelectedPairFaces", { toleranceMm: 1.0 });
     }
 
+    function connectUiVerifyAllBboxCandidates() {
+      connectUiSetMessage("正在批量面验证 bbox 候选（边对面结构对接）…");
+      connectUiSetOperation("批量面验证计算中…", "warn");
+      fusionSend("relationships.verifyAllBboxCandidates", { toleranceMm: 1.0, maxPairs: 200 });
+    }
+
+    function connectUiRenderBatchSkipList(skipped) {
+      const skipDetails = connectUiEl("connectBatchSkipDetails");
+      const skipList = connectUiEl("connectBatchSkipList");
+      if (!skipDetails || !skipList) return;
+      const rows = Array.isArray(skipped) ? skipped : [];
+      if (!rows.length) {
+        skipDetails.hidden = true;
+        skipList.textContent = "";
+        return;
+      }
+      skipDetails.hidden = false;
+      skipList.textContent = rows.map((item) => {
+        const reason = CONNECT_BATCH_SKIP_LABELS[item.reason] || item.reason || "跳过";
+        const detail = (item.errors && item.errors[0]) ? ` — ${item.errors[0]}` : "";
+        return `${item.panelA || "?"} ↔ ${item.panelB || "?"}: ${reason}${detail}`;
+      }).join("\n");
+    }
+
     function connectUiCut() {
       const relationship = connectUiActiveRelationship();
       if (!relationship) {
@@ -11748,6 +11791,47 @@
         connectUiSetOperation((parsed?.errors || ["面验证失败"]).join(" "), "error");
         connectUiSetMessage((parsed?.errors || ["面验证失败"]).join(" "), "error");
       }
+    }
+
+    function connectUiHandleFaceVerifyBatchResult(parsed) {
+      connectContactState.lastBatchVerify = parsed || null;
+      const verified = Array.isArray(parsed?.verifiedRelationships) ? parsed.verifiedRelationships : [];
+      connectContactState.verifiedRelationships = verified;
+      if (parsed?.scan?.panels?.length) {
+        connectContactState.lastPanels = parsed.scan.panels;
+      }
+      connectUiRenderBatchSkipList(parsed?.skipped || []);
+
+      if (!parsed?.ok) {
+        const err = (parsed?.errors || ["批量面验证失败"]).join(" ");
+        connectUiSetOperation(err, "error");
+        connectUiSetMessage(err, "error");
+        return;
+      }
+
+      if (verified.length) {
+        const current = connectUiActiveRelationship();
+        const currentSafe = Boolean(current?.verification?.safeForCut)
+          && current?.verification?.level !== "bbox_candidate"
+          && current?.verification?.level !== "bbox_contact_patch";
+        if (!currentSafe) {
+          connectContactState.lastRelationship = verified[0];
+          connectContactState.confirmedRelationship = verified[0];
+          connectUiRenderInspect({
+            ok: true,
+            relationship: verified[0],
+            panels: connectContactState.lastPanels,
+            contactPatch: connectContactState.lastContactPatch,
+            selectedPanelIds: [],
+          });
+        }
+      }
+
+      const reminders = (parsed?.reminders || []).filter(Boolean);
+      const summary = `批量面验证：通过 ${parsed.verifiedCount || 0} · 跳过 ${parsed.skippedCount || 0}（本次会话有效）`;
+      const tone = (parsed.skippedCount || 0) > 0 ? "warn" : "ok";
+      connectUiSetOperation(summary, tone);
+      connectUiSetMessage(reminders.length ? reminders.join(" ") : summary, tone);
     }
 
     function connectUiHandleExecuteResult(parsed) {
@@ -11895,6 +11979,7 @@
     function connectUiInit() {
       connectUiEl("connectProbeSelectionBtn")?.addEventListener("click", connectUiProbeSelection);
       connectUiEl("connectScanBtn")?.addEventListener("click", connectUiScan);
+      connectUiEl("connectVerifyAllBtn")?.addEventListener("click", connectUiVerifyAllBboxCandidates);
       connectUiEl("connectInspectBtn")?.addEventListener("click", connectUiInspectSelected);
       connectUiEl("connectShowContactPatchBtn")?.addEventListener("click", connectUiShowContactPatch);
       connectUiEl("connectClearContactPatchBtn")?.addEventListener("click", connectUiClearContactPatch);

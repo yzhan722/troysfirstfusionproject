@@ -131,17 +131,24 @@ def run_real_cabinet_hardware_fusion_smoke(
         {"relationship": bp_d0, "rule": dict(SCREW_RULE), "panels": screw_panels},
         None,
     )
-    vol_after = safe_volume(host_body)
+    host_after = find_body_by_panel_id(root, host_id, panel_map.get(host_id)) or host_body
+    vol_after = safe_volume(host_after)
     screw_name = str((screw_cut or {}).get("cutFeatureName") or "")
+    feature_ok = cut_feature_exists(root, screw_name)
+    volume_delta = abs(vol_after - vol_before)
     screw_ok = (
         bool((screw_cut or {}).get("ok"))
         and (screw_cut or {}).get("hardwareType") == "screw_hole"
         and bool(screw_name)
-        and cut_feature_exists(root, screw_name)
-        and abs(vol_after - vol_before) > 0.01
+        and feature_ok
+        and volume_delta > 0.01
     )
     if not record("3 generic screw cut BP-D0", screw_ok, {
         "cutFeatureName": screw_name,
+        "cutFeatureExists": feature_ok,
+        "hostVolumeBefore": vol_before,
+        "hostVolumeAfter": vol_after,
+        "hostVolumeDelta": vol_after - vol_before,
         "panelWriteback": (screw_cut or {}).get("panelWriteback"),
         "errors": (screw_cut or {}).get("errors"),
     }):
@@ -162,6 +169,8 @@ def run_real_cabinet_hardware_fusion_smoke(
         {"relationship": bp_fp0, "rule": dict(TONGUE_RULE), "panels": tg_panels},
         None,
     )
+    tg_host = find_body_by_panel_id(root, tg_host_id, panel_map.get(tg_host_id)) or tg_host
+    tg_target = find_body_by_panel_id(root, tg_target_id, panel_map.get(tg_target_id)) or tg_target
     h_after = safe_volume(tg_host)
     t_after = safe_volume(tg_target)
     tg_name = str((tg_cut or {}).get("cutFeatureName") or (tg_cut or {}).get("tongueFeatureName") or "")
@@ -173,6 +182,8 @@ def run_real_cabinet_hardware_fusion_smoke(
     )
     if not record("4 generic tongue/groove cut BP-FP0", tg_ok, {
         "cutFeatureName": tg_name,
+        "hostVolumeDelta": h_after - h_before,
+        "targetVolumeDelta": t_after - t_before,
         "hostWriteback": (tg_cut or {}).get("panelWriteback"),
         "targetWriteback": (tg_cut or {}).get("targetPanelWriteback"),
         "errors": (tg_cut or {}).get("errors"),

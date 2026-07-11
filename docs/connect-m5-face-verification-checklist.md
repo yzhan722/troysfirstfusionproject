@@ -19,6 +19,8 @@
 | Script | Environment |
 |--------|-------------|
 | `python -m unittest tests.test_face_verification` | Terminal |
+| `python -m unittest tests.test_face_verification_batch` | Terminal |
+| `tests/run_verify_all_offline.py` | Terminal (batch 3a) |
 | `tests/run_relationship_regression.py` | Terminal (includes face + declared tests) |
 
 M5 one-click smoke scripts (`m5_connect_smoke.py`, `run_m5_smoke_offline.py`, later `connect_pipeline_smoke` / `contact_patch_smoke`) were removed after seal. Use offline regression + Debug UI workflow below.

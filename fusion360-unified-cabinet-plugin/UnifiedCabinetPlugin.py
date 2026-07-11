@@ -128,6 +128,7 @@ class UnifiedCabinetPluginApp:
             "relationships.showContactPatchOverlayForSelected": relationships.show_contact_patch_overlay_for_selected,
             "relationships.clearContactPatchOverlays": relationships.clear_contact_patch_overlays,
             "relationships.verifySelectedPairFaces": relationships.verify_selected_pair_faces,
+            "relationships.verifyAllBboxCandidates": relationships.verify_all_bbox_candidates,
             "relationships.reconcileGeneratorDeclarations": relationships.reconcile_generator_declarations,
             "relationships.connectList": relationships.connect_list,
             "relationships.connectExecute": relationships.connect_execute,

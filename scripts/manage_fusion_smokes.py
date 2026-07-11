@@ -53,6 +53,7 @@ BATCH_SMOKE = {
     "lock": "lock_cutout_connect_smoke",
     "generic": "generic_hardware_connect_smoke",
     "realhw": "real_cabinet_hardware_connect_smoke",
+    "verifyall": "verify_all_connect_smoke",
 }
 
 ALL_TEMPORARY_SMOKES = list(DAY_SMOKE.values()) + list(BATCH_SMOKE.values())

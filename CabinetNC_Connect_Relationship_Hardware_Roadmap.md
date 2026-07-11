@@ -123,6 +123,15 @@ Post-M9 Connect UI hardware-type selector (offline sealed 2026-07-09):
   ✅ hardware.listHardwareTypes / previewHardwareFromRelationship / createHardwareFromRelationship
   ✅ offline: run_connect_hardware_type_ui_offline.py
   📄 docs/connect-post-m9-hardware-type-ui-checklist.md
+
+Batch face verify 3a (SEALED 2026-07-11):
+  ✅ verify_all_bbox_candidates (edge_to_surface + structural_butt_joint; maxPairs=200)
+  ✅ skip failures + Chinese reminders; bbox cut gate unchanged; session-only upgrades
+  ✅ relationships.verifyAllBboxCandidates + Connect「验证全部候选」
+  ✅ offline: run_verify_all_offline.py + test_face_verification_batch
+  ✅ Fusion: verify_all_connect_smoke PASS (4/4), then remove --batch verifyall
+  ✅ hardware cut/preview re-plan from physical bboxes (OH postprocess Z shifts)
+  📄 docs/connect-batch-face-verify-checklist.md
 ```
 
 Current relationship layer is **not production-truth**. It is currently:

@@ -372,6 +372,7 @@ def validate_routes_registered() -> bool:
         "relationships.showRelationshipOverlayForSelected",
         "relationships.reconcileGeneratorDeclarations",
         "relationships.verifySelectedPairFaces",
+        "relationships.verifyAllBboxCandidates",
         "relationships.runOverlaySelfCheck",
         "relationships.clearRelationshipOverlays",
         "relationships.showContactPatchOverlayForSelected",

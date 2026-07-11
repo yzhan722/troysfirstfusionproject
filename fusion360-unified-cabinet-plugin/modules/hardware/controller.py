@@ -188,6 +188,9 @@ class HardwareController:
 
             if panel_snapshots is None:
                 panel_snapshots = self._panel_snapshots_from_design(payload, relationship)
+            panel_snapshots = (
+                self._resolve_cut_panel_snapshots(relationship, panel_snapshots) or panel_snapshots
+            )
 
             report = preview_screw_holes_from_relationship(
                 relationship,
@@ -234,6 +237,9 @@ class HardwareController:
             panel_snapshots = payload.get("panels") if isinstance(payload.get("panels"), dict) else None
             if panel_snapshots is None:
                 panel_snapshots = self._panel_snapshots_from_design(payload, relationship)
+            panel_snapshots = (
+                self._resolve_cut_panel_snapshots(relationship, panel_snapshots) or panel_snapshots
+            )
 
             plan = plan_screw_hole_cut_from_relationship(
                 relationship,
@@ -473,6 +479,9 @@ class HardwareController:
             panel_snapshots = payload.get("panels") if isinstance(payload.get("panels"), dict) else None
             if panel_snapshots is None:
                 panel_snapshots = self._panel_snapshots_from_design(payload, relationship)
+            panel_snapshots = (
+                self._resolve_cut_panel_snapshots(relationship, panel_snapshots) or panel_snapshots
+            )
             report = preview_hinge_holes_from_relationship(
                 relationship,
                 rule=rule,
@@ -518,6 +527,9 @@ class HardwareController:
             panel_snapshots = payload.get("panels") if isinstance(payload.get("panels"), dict) else None
             if panel_snapshots is None:
                 panel_snapshots = self._panel_snapshots_from_design(payload, relationship)
+            panel_snapshots = (
+                self._resolve_cut_panel_snapshots(relationship, panel_snapshots) or panel_snapshots
+            )
 
             plan = plan_hinge_hole_cut_from_relationship(
                 relationship,
@@ -638,6 +650,9 @@ class HardwareController:
             panel_snapshots = payload.get("panels") if isinstance(payload.get("panels"), dict) else None
             if panel_snapshots is None:
                 panel_snapshots = self._panel_snapshots_from_design(payload, relationship)
+            panel_snapshots = (
+                self._resolve_cut_panel_snapshots(relationship, panel_snapshots) or panel_snapshots
+            )
             report = preview_lock_cutout_from_relationship(
                 relationship,
                 rule=rule,
@@ -683,6 +698,9 @@ class HardwareController:
             panel_snapshots = payload.get("panels") if isinstance(payload.get("panels"), dict) else None
             if panel_snapshots is None:
                 panel_snapshots = self._panel_snapshots_from_design(payload, relationship)
+            panel_snapshots = (
+                self._resolve_cut_panel_snapshots(relationship, panel_snapshots) or panel_snapshots
+            )
 
             plan = plan_lock_cutout_from_relationship(
                 relationship,
@@ -803,6 +821,9 @@ class HardwareController:
             panel_snapshots = payload.get("panels") if isinstance(payload.get("panels"), dict) else None
             if panel_snapshots is None:
                 panel_snapshots = self._panel_snapshots_from_design(payload, relationship)
+            panel_snapshots = (
+                self._resolve_cut_panel_snapshots(relationship, panel_snapshots) or panel_snapshots
+            )
             report = preview_drawer_runner_holes_from_relationship(
                 relationship,
                 rule=rule,
@@ -848,6 +869,9 @@ class HardwareController:
             panel_snapshots = payload.get("panels") if isinstance(payload.get("panels"), dict) else None
             if panel_snapshots is None:
                 panel_snapshots = self._panel_snapshots_from_design(payload, relationship)
+            panel_snapshots = (
+                self._resolve_cut_panel_snapshots(relationship, panel_snapshots) or panel_snapshots
+            )
 
             plan = plan_drawer_runner_hole_cut_from_relationship(
                 relationship,
@@ -968,6 +992,9 @@ class HardwareController:
             panel_snapshots = payload.get("panels") if isinstance(payload.get("panels"), dict) else None
             if panel_snapshots is None:
                 panel_snapshots = self._panel_snapshots_from_design(payload, relationship)
+            panel_snapshots = (
+                self._resolve_cut_panel_snapshots(relationship, panel_snapshots) or panel_snapshots
+            )
             report = preview_tongue_groove_from_relationship(
                 relationship,
                 rule=rule,
@@ -1013,6 +1040,9 @@ class HardwareController:
             panel_snapshots = payload.get("panels") if isinstance(payload.get("panels"), dict) else None
             if panel_snapshots is None:
                 panel_snapshots = self._panel_snapshots_from_design(payload, relationship)
+            panel_snapshots = (
+                self._resolve_cut_panel_snapshots(relationship, panel_snapshots) or panel_snapshots
+            )
 
             plan = plan_tongue_groove_cut_from_relationship(
                 relationship,
@@ -1162,13 +1192,53 @@ class HardwareController:
 
             rel_service_module = importlib.reload(rel_service_module)
             service = rel_service_module.RelationshipService(self.fusion)
-            snapshots = service.collect_panels_from_design()
+            # physical: cut/preview coords must match body space after OH_SUPPORT_Z etc.
+            snapshots = service.collect_panels_from_design(bbox_source="physical")
             panel_map = {item.panelId: item.to_dict() for item in snapshots}
             if host_id in panel_map and target_id in panel_map:
                 return {host_id: panel_map[host_id], target_id: panel_map[target_id]}
         except Exception:
             return None
         return None
+
+    def _resolve_cut_panel_snapshots(self, relationship, hint_panels=None, root=None):
+        """Prefer physical Fusion bboxes for cut/preview planning.
+
+        ponytail: designGeometry metadata goes stale after OH_SUPPORT_Z / divider Z
+        moves; planning in design space while drilling against the physical body
+        aims the extrude the wrong way (silent zero-volume cut).
+        """
+        if root is None and self.fusion:
+            try:
+                root = self.fusion.get_root_component()
+            except Exception:
+                root = None
+        roles = (relationship or {}).get("roles") or {}
+        host_id = str(roles.get("hostPanelId") or "").strip()
+        target_id = str(roles.get("targetPanelId") or "").strip()
+        hints = hint_panels if isinstance(hint_panels, dict) else {}
+        if not root or not host_id or not target_id:
+            return hints or None
+
+        host_body = self._find_body_by_panel_id(root, host_id, hints.get(host_id))
+        target_body = self._find_body_by_panel_id(root, target_id, hints.get(target_id))
+        if host_body is None or target_body is None:
+            return hints or None
+        try:
+            import importlib
+            from modules.relationships import relationship_service as rel_service_module
+
+            rel_service_module = importlib.reload(rel_service_module)
+            return {
+                host_id: rel_service_module.build_panel_snapshot(
+                    host_body, bbox_source="physical"
+                ).to_dict(),
+                target_id: rel_service_module.build_panel_snapshot(
+                    target_body, bbox_source="physical"
+                ).to_dict(),
+            }
+        except Exception:
+            return hints or None
 
     def create_side_contact_test_boards(self, _payload, _palette):
         try:

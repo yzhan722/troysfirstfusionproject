@@ -145,6 +145,10 @@ def main() -> int:
         "hardware-shell-simple",
         "connectVerifyHint",
         "connectContactDistance",
+        'id="connectVerifyAllBtn"',
+        "connectUiVerifyAllBboxCandidates",
+        "relationshipFaceVerifyBatchResult",
+        "relationships.verifyAllBboxCandidates",
     ):
         if token not in palette:
             return _fail("palette missing", token)

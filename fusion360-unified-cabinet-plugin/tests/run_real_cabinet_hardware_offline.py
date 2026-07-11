@@ -100,6 +100,40 @@ def main() -> int:
             return _fail("{} cut plan".format(hw_type), plan)
         print("[PASS] {} preview + cut plan on overhead BP-D0".format(hw_type))
 
+    # ponytail: OH_SUPPORT_Z shifts BP +FGw while designGeometry stays at z=0..15.
+    # Fusion cuts must re-plan from physical bboxes or the drill aims the wrong way.
+    fg = float((bridge.get("params") or {}).get("featureWidth") or 15.0)
+    design_face = ((dispatch_hardware_cut_plan(
+        bp_d0, rule={"type": HARDWARE_TYPE_SCREW_HOLE}, panel_snapshots=panels_payload
+    ).get("feature") or {}).get("geometry") or {}).get("positions") or [{}]
+    design_z = float(design_face[0].get("z") or 0.0)
+    physical_panels = {
+        host_id: dict(panels_payload[host_id], bbox={
+            **(panels_payload[host_id].get("bbox") or {}),
+            "z0": float((panels_payload[host_id].get("bbox") or {}).get("z0") or 0.0) + fg,
+            "z1": float((panels_payload[host_id].get("bbox") or {}).get("z1") or 0.0) + fg,
+        }),
+        target_id: dict(panels_payload[target_id], bbox={
+            **(panels_payload[target_id].get("bbox") or {}),
+            "z0": float((panels_payload[target_id].get("bbox") or {}).get("z0") or 0.0) + 2.0 * fg,
+            "z1": float((panels_payload[target_id].get("bbox") or {}).get("z1") or 0.0) + 2.0 * fg,
+        }),
+    }
+    physical_plan = dispatch_hardware_cut_plan(
+        bp_d0, rule={"type": HARDWARE_TYPE_SCREW_HOLE}, panel_snapshots=physical_panels
+    )
+    if not physical_plan.get("ok"):
+        return _fail("physical-shifted BP-D0 screw plan", physical_plan)
+    physical_z = float(
+        ((((physical_plan.get("feature") or {}).get("geometry") or {}).get("positions") or [{}])[0]).get("z") or 0.0
+    )
+    if abs(physical_z - design_z - fg) > 0.1:
+        return _fail(
+            "physical plan host face tracks OH_SUPPORT_Z",
+            {"designZ": design_z, "physicalZ": physical_z, "fg": fg},
+        )
+    print("[PASS] physical-shifted screw face z={}->{} (+FGw)".format(design_z, physical_z))
+
     print("")
     print("Real-cabinet hardware offline: ALL PASS")
     return 0
