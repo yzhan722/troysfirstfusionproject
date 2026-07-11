@@ -263,6 +263,54 @@ def filter_relationships(
     return filtered
 
 
+def _panel_ids_from_relationship(relationship: Dict[str, Any]) -> Set[str]:
+    panel_a = relationship.get("panelA") or {}
+    panel_b = relationship.get("panelB") or {}
+    roles = relationship.get("roles") or {}
+    ids = {
+        str(panel_a.get("panelId") or ""),
+        str(panel_b.get("panelId") or ""),
+        str(roles.get("hostPanelId") or ""),
+        str(roles.get("targetPanelId") or ""),
+    }
+    return {panel_id for panel_id in ids if panel_id}
+
+
+def match_declared_relationship_for_pair(
+    declared_relationships: Optional[List[Dict[str, Any]]],
+    panel_ids: Optional[List[str]],
+) -> Optional[Dict[str, Any]]:
+    """Return a cut-safe generator_declared match for the selected panel pair, if any."""
+    wanted = {str(panel_id or "") for panel_id in (panel_ids or []) if panel_id}
+    if len(wanted) < 2:
+        return None
+    for rel in declared_relationships or []:
+        if not isinstance(rel, dict):
+            continue
+        if relationship_verification_level(rel) != "generator_declared":
+            continue
+        if (rel.get("geometryValidation") or {}).get("ok") is False:
+            continue
+        if not is_cut_allowed(rel):
+            continue
+        panel_a = str((rel.get("panelA") or {}).get("panelId") or "")
+        panel_b = str((rel.get("panelB") or {}).get("panelId") or "")
+        if panel_a and panel_b and {panel_a, panel_b} == wanted:
+            return rel
+        if len(wanted & _panel_ids_from_relationship(rel)) >= 2:
+            return rel
+    return None
+
+
+def preferred_verify_step(relationship: Optional[Dict[str, Any]]) -> str:
+    """Product verify path: declared/face → cut_ready; else face_verify (manual is debug-only)."""
+    if not relationship:
+        return "inspect"
+    if is_cut_allowed(relationship):
+        return "cut_ready"
+    return "face_verify"
+
+
 def build_connect_view_model(
     scan_result: Dict[str, Any],
     *,

@@ -20,6 +20,7 @@ Connect → 操作:
 - Preview / Cut buttons label follow selected type
 - Verify hint: generator_declared → face_verified → (debug) manual confirm
 - Near-contact (≤1mm) shown on inspect distance row; cut-safe after verify
+- Inspect auto-reconciles declarations; main actions: 同步声明 / 面验证; 手动确认 in 开发工具 only
 
 ## Product decisions (2026-07-10)
 
@@ -27,6 +28,15 @@ Connect → 操作:
 2. **Default verify path:** prefer `generator_declared` when present; else `face_verified`; keep `manual_confirm` as debug fallback only.
 3. **Hardware params are UI-editable** (defaults remain in `CONNECT_HW_RULES`).
 4. **Downstream NC consumers of writeback:** not yet — defer metadata polish.
+
+## Default verify path (productized 2026-07-11)
+
+| Step | Behavior |
+|------|----------|
+| Inspect | If already cut-safe → ready; else auto `reconcileGeneratorDeclarations` |
+| Match | Selected pair upgraded when a cut-safe `generator_declared` match exists |
+| Else | Guide to 面验证; 手动确认 stays under 开发工具 |
+| Helpers | `preferred_verify_step` + `match_declared_relationship_for_pair` in `connect_formal_ui.py` |
 
 ## Routes
 
@@ -52,3 +62,4 @@ python tests/run_plugin_offline_regression.py
 - [x] Per-type params rendered and sent in preview/cut payload
 - [x] Offline type-UI smoke PASS
 - [x] Verify-path hint + near-contact distance label in Connect UI
+- [x] Default path productized: auto-reconcile after inspect; confirm moved to debug

@@ -18,6 +18,8 @@ from connect_formal_ui import (  # noqa: E402
     format_relationship_row,
     is_cut_allowed,
     is_preview_allowed,
+    match_declared_relationship_for_pair,
+    preferred_verify_step,
 )
 from connect_demo_pack import find_first_screw_eligible  # noqa: E402
 from relationship_fixtures import build_fixture_snapshots, expected_fixture_cases  # noqa: E402
@@ -153,6 +155,39 @@ class ConnectFormalUiTests(unittest.TestCase):
             selected_relationship_id=declared.get("relationshipId"),
         )
         self.assertTrue(view["actions"]["cut"]["ok"])
+
+    def test_preferred_verify_step_and_declared_pair_match(self):
+        from generator_bridge_runner import load_params_fixture, run_overhead
+        from generator_declared_service import reconcile_generator_declarations
+        from generator_panel_adapter import snapshots_from_generator_result
+        from relationship_service import build_panel_snapshot_from_dict
+
+        scan = _fixture_scan()
+        bbox = find_first_screw_eligible(scan.get("relationships") or [])
+        self.assertEqual(preferred_verify_step(bbox), "face_verify")
+        confirmed = apply_manual_confirm(bbox)
+        self.assertEqual(preferred_verify_step(confirmed), "cut_ready")
+
+        snapshots = [
+            build_panel_snapshot_from_dict(item)
+            for item in snapshots_from_generator_result(
+                "overhead", run_overhead(load_params_fixture("overhead_edge_only.json"))
+            )
+        ]
+        reconcile = reconcile_generator_declarations(snapshots, generator="overhead")
+        declared = reconcile.get("declaredRelationships") or []
+        bp_d0 = next(
+            item
+            for item in declared
+            if {(item.get("panelA") or {}).get("panelId"), (item.get("panelB") or {}).get("panelId")} == {"BP", "D0"}
+        )
+        panel_a = (bp_d0.get("panelA") or {}).get("panelId")
+        panel_b = (bp_d0.get("panelB") or {}).get("panelId")
+        match = match_declared_relationship_for_pair(declared, [panel_a, panel_b])
+        self.assertIsNotNone(match)
+        self.assertEqual(match.get("verification", {}).get("level"), "generator_declared")
+        self.assertEqual(preferred_verify_step(match), "cut_ready")
+        self.assertIsNone(match_declared_relationship_for_pair(declared, ["NOPE_A", "NOPE_B"]))
 
 
 if __name__ == "__main__":

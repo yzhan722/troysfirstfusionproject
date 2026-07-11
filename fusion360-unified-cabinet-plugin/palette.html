@@ -2233,7 +2233,7 @@
         <div class="card connect-card">
           <h3>板件连接</h3>
           <div class="card-body">
-            <div class="hardware-section-note">选中两块板 → 检查 → 选五金 → 预览 → 确认或面验证 → 创建。bbox 候选不可直接切削。</div>
+            <div class="hardware-section-note">选中两块板 → 检查 →（自动同步声明或面验证）→ 选五金 → 预览 → 创建。bbox 候选不可直接切削。</div>
 
             <div class="connect-section">
               <h4 class="connect-section-title">选中板件</h4>
@@ -2292,12 +2292,12 @@
               </div>
               <div class="connect-detail-grid" id="connectHardwareParams" style="margin-bottom: 10px;"></div>
               <div class="hardware-section-note" id="connectVerifyHint" style="margin-bottom:8px;">
-                验证优先：生成器声明 → 面验证 →（调试）手动确认。≤1mm 近接触视为可切接触。
+                验证优先：生成器声明（检查后自动同步）→ 面验证 →（调试）手动确认。≤1mm 近接触视为可切接触。
               </div>
               <div class="connect-actions">
                 <button type="button" class="ghost" id="connectPreviewBtn" disabled>预览</button>
+                <button type="button" class="ghost" id="connectReconcileBtn" disabled>同步声明</button>
                 <button type="button" class="ghost" id="connectFaceVerifyBtn" disabled>面验证</button>
-                <button type="button" class="ghost" id="connectConfirmBtn" disabled>确认关系</button>
                 <button type="button" class="primary" id="connectCutBtn" disabled>创建</button>
               </div>
               <div class="connect-detail-grid" style="margin-top: 10px;">
@@ -2396,8 +2396,9 @@
               <div class="hardware-debug-actions">
                 <button type="button" class="primary" id="hwRelRunDay1SmokeBtn">运行 Day 1 自动验证</button>
                 <button type="button" class="ghost" id="hwRelCreateFixtureBtn">创建关系测试板</button>
-                <button type="button" class="ghost" id="hwRelReconcileOverheadDeclarationsBtn">同步吊柜声明关系</button>
+                <button type="button" class="ghost" id="hwRelReconcileOverheadDeclarationsBtn">同步声明关系</button>
                 <button type="button" class="ghost" id="hwRelVerifySelectedFacesBtn">面验证</button>
+                <button type="button" class="ghost" id="connectConfirmBtn" disabled>手动确认（调试）</button>
                 <button type="button" class="primary" id="hwRelRunDemoFixtureFlowBtn">运行演示流程</button>
                 <button type="button" class="ghost" id="hwRelRunDemoNegativeBtn">运行负面案例检查</button>
                 <button type="button" class="ghost" id="hwRelRunDemoPackOfflineBtn">运行离线演示包</button>
@@ -8761,7 +8762,7 @@
           } else if (action === "relationshipFaceVerifyResult") {
             connectUiHandleFaceVerifyResult(parsed);
           } else if (action === "relationshipDeclaredResult") {
-            hwRelDebugHandleDeclaredResult(parsed);
+            connectUiHandleDeclaredResult(parsed);
           } else if (action === "connectExecuteResult") {
             connectUiHandleExecuteResult(parsed);
           } else if (action === "panelAttributesResult") {
@@ -11000,6 +11001,8 @@
       lastPreview: null,
       confirmedRelationship: null,
       lastScanCount: null,
+      pendingAutoReconcile: false,
+      selectedPanelIds: [],
     };
 
     const CONNECT_HW_RULES = {
@@ -11370,6 +11373,7 @@
         connectUiEl("connectErrors") && (connectUiEl("connectErrors").textContent = (parsed?.errors || parsed?.contactPatchErrors || ["检查失败"]).join(" "));
         connectUiEl("connectShowContactPatchBtn") && (connectUiEl("connectShowContactPatchBtn").disabled = true);
         connectUiEl("connectConfirmBtn") && (connectUiEl("connectConfirmBtn").disabled = true);
+        connectUiEl("connectReconcileBtn") && (connectUiEl("connectReconcileBtn").disabled = true);
         connectUiEl("connectFaceVerifyBtn") && (connectUiEl("connectFaceVerifyBtn").disabled = true);
         connectUiEl("connectPreviewBtn") && (connectUiEl("connectPreviewBtn").disabled = true);
         connectUiEl("connectCutBtn") && (connectUiEl("connectCutBtn").disabled = true);
@@ -11379,6 +11383,7 @@
       const verification = rel.verification || {};
       const patch = connectContactState.lastContactPatch || {};
       const patchVerification = patch.verification || {};
+      connectContactState.selectedPanelIds = panelIds.slice(0, 2);
       connectUiUpdateInspectSummary(parsed);
       connectUiEl("connectRelType") && (connectUiEl("connectRelType").textContent = connectUiRelationshipLabel(rel.relationshipType));
       connectUiEl("connectGeometryType") && (connectUiEl("connectGeometryType").textContent = connectUiGeometryLabel(rel.geometryType));
@@ -11411,10 +11416,19 @@
         && rel.roles?.hostPanelId
         && rel.roles?.targetPanelId;
       connectUiEl("connectConfirmBtn") && (connectUiEl("connectConfirmBtn").disabled = !confirmAllowed);
+      connectUiEl("connectReconcileBtn") && (connectUiEl("connectReconcileBtn").disabled = !confirmAllowed);
 
       const previewAllowed = confirmAllowed && Boolean(verification.safeForPreview !== false);
       connectUiEl("connectPreviewBtn") && (connectUiEl("connectPreviewBtn").disabled = !previewAllowed);
       connectUiEl("connectFaceVerifyBtn") && (connectUiEl("connectFaceVerifyBtn").disabled = !confirmAllowed);
+
+      const cutSafeLevel = verification.level === "generator_declared"
+        || verification.level === "face_verified"
+        || verification.level === "manual_confirmed"
+        || verification.level === "cut_approved";
+      if (cutSafeLevel && Boolean(verification.safeForCut)) {
+        connectContactState.confirmedRelationship = rel;
+      }
 
       const hwMeta = connectUiHardwareMeta(connectUiSelectedHardwareType());
       const cutGateOpen = Boolean(connectContactState.confirmedRelationship?.verification?.safeForCut)
@@ -11474,6 +11488,85 @@
       fusionSend("hardware.previewHardwareFromRelationship", connectUiBuildPreviewPayload(relationship));
     }
 
+    function connectUiReconcileDeclarations() {
+      connectUiSetMessage("正在同步生成器声明关系…");
+      connectUiSetOperation("同步声明中…", "warn");
+      connectContactState.pendingAutoReconcile = false;
+      fusionSend("relationships.reconcileGeneratorDeclarations", { toleranceMm: 1.0 });
+    }
+
+    function connectUiMatchDeclaredForSelected(declaredRelationships) {
+      const wanted = new Set(
+        (connectContactState.selectedPanelIds || []).filter(Boolean)
+          .concat([
+            connectContactState.lastRelationship?.panelA?.panelId,
+            connectContactState.lastRelationship?.panelB?.panelId,
+            connectContactState.lastRelationship?.roles?.hostPanelId,
+            connectContactState.lastRelationship?.roles?.targetPanelId,
+          ].filter(Boolean)),
+      );
+      if (wanted.size < 2) return null;
+      for (const rel of declaredRelationships || []) {
+        if (!rel || rel?.verification?.level !== "generator_declared") continue;
+        if (rel?.geometryValidation?.ok === false) continue;
+        if (!rel?.verification?.safeForCut) continue;
+        const panelA = rel?.panelA?.panelId;
+        const panelB = rel?.panelB?.panelId;
+        const host = rel?.roles?.hostPanelId;
+        const target = rel?.roles?.targetPanelId;
+        const ids = new Set([panelA, panelB, host, target].filter(Boolean));
+        const overlap = [...wanted].filter((id) => ids.has(id));
+        if ((panelA && panelB && wanted.has(panelA) && wanted.has(panelB)) || overlap.length >= 2) {
+          return rel;
+        }
+      }
+      return null;
+    }
+
+    function connectUiApplyDeclaredMatch(declared) {
+      if (!declared) return false;
+      connectContactState.lastRelationship = declared;
+      connectContactState.confirmedRelationship = declared;
+      connectUiRenderInspect({
+        ok: true,
+        relationship: declared,
+        panels: connectContactState.lastPanels,
+        selectedPanelIds: connectContactState.selectedPanelIds,
+        contactPatch: connectContactState.lastContactPatch,
+      });
+      return true;
+    }
+
+    function connectUiHandleDeclaredResult(parsed) {
+      hwRelDebugHandleDeclaredResult(parsed);
+      const wasAuto = Boolean(connectContactState.pendingAutoReconcile);
+      connectContactState.pendingAutoReconcile = false;
+      if (!parsed?.ok) {
+        if (wasAuto) {
+          connectUiSetOperation("检查完成。无可用声明，请面验证后创建。", "warn");
+          connectUiSetMessage("未找到匹配的生成器声明，请使用面验证。", "warn");
+        } else {
+          connectUiSetMessage((parsed?.errors || ["同步声明失败"]).join(" "), "error");
+          connectUiSetOperation("同步声明失败", "error");
+        }
+        return;
+      }
+      const match = connectUiMatchDeclaredForSelected(parsed.declaredRelationships || []);
+      if (connectUiApplyDeclaredMatch(match)) {
+        connectUiSetMessage(
+          `已匹配生成器声明（${match.declarationId || match.relationshipId || "declared"}），可直接预览/创建。`,
+          "ok",
+        );
+        connectUiSetOperation("声明已同步，可创建。", "ok");
+        return;
+      }
+      const next = wasAuto
+        ? "检查完成。无匹配声明，请面验证后创建。"
+        : `已同步 ${parsed.declarationCount || 0} 条声明（${parsed.geometryOkCount || 0} 几何 OK），当前选中对无匹配；请面验证。`;
+      connectUiSetOperation(next, "warn");
+      connectUiSetMessage(next, "warn");
+    }
+
     function connectUiConfirm() {
       const relationship = connectContactState.lastRelationship;
       if (!relationship) {
@@ -11497,7 +11590,7 @@
     function connectUiCut() {
       const relationship = connectUiActiveRelationship();
       if (!relationship) {
-        connectUiSetMessage("请先检查并确认关系。", "error");
+        connectUiSetMessage("请先检查并完成声明同步或面验证。", "error");
         return;
       }
       fusionSend("relationships.connectExecute", { action: "cut", relationship });
@@ -11511,13 +11604,24 @@
       }
       if (parsed?.ok) {
         const patch = parsed.contactPatch;
+        const rel = parsed.relationship;
+        const cutSafe = Boolean(rel?.verification?.safeForCut)
+          && rel?.verification?.level !== "bbox_candidate"
+          && rel?.verification?.level !== "bbox_contact_patch";
         connectUiSetMessage(
           patch
             ? `已识别关系；接触面积 ${patch.contactAreaMm2} mm²。`
             : "已识别关系，但未能生成接触面。",
           patch ? "ok" : "warn",
         );
-        connectUiSetOperation("检查完成。下一步：选五金 → 预览 → 确认或面验证 → 创建。", "ok");
+        if (cutSafe) {
+          connectContactState.confirmedRelationship = rel;
+          connectUiSetOperation("检查完成。关系已可切：选五金 → 预览 → 创建。", "ok");
+        } else {
+          connectContactState.pendingAutoReconcile = true;
+          connectUiSetOperation("检查完成。正在尝试同步生成器声明…", "warn");
+          fusionSend("relationships.reconcileGeneratorDeclarations", { toleranceMm: 1.0 });
+        }
       } else {
         const errors = parsed?.errors || [];
         const msg = errors.length
@@ -11739,6 +11843,7 @@
       connectUiEl("connectShowContactPatchBtn")?.addEventListener("click", connectUiShowContactPatch);
       connectUiEl("connectClearContactPatchBtn")?.addEventListener("click", connectUiClearContactPatch);
       connectUiEl("connectConfirmBtn")?.addEventListener("click", connectUiConfirm);
+      connectUiEl("connectReconcileBtn")?.addEventListener("click", connectUiReconcileDeclarations);
       connectUiEl("connectFaceVerifyBtn")?.addEventListener("click", connectUiFaceVerify);
       connectUiEl("connectPreviewBtn")?.addEventListener("click", connectUiPreview);
       connectUiEl("connectCutBtn")?.addEventListener("click", connectUiCut);
@@ -12078,8 +12183,8 @@
     }
 
     function hwRelDebugReconcileOverheadDeclarations() {
-      hwRelDebugSetMessage("正在 Reconcile Overhead 生成器声明… / Reconciling Overhead generator-declared relationships...");
-      fusionSend("relationships.reconcileGeneratorDeclarations", { generator: "overhead", toleranceMm: 1.0 });
+      hwRelDebugSetMessage("正在 Reconcile 生成器声明… / Reconciling generator-declared relationships...");
+      fusionSend("relationships.reconcileGeneratorDeclarations", { toleranceMm: 1.0 });
     }
 
     function hwRelDebugHandleDeclaredResult(parsed) {
@@ -12100,7 +12205,7 @@
       hwRelDebugUpdateConfirmButtonLabel();
       if (parsed?.ok) {
         hwRelDebugSetMessage(
-          `已 Reconcile ${parsed.declarationCount || 0} 条 Overhead 声明（${parsed.geometryOkCount || 0} 条几何 OK）。/ Reconciled declarations.`,
+          `已 Reconcile ${parsed.declarationCount || 0} 条声明（${parsed.geometryOkCount || 0} 条几何 OK）。/ Reconciled declarations.`,
           "ok",
         );
       } else {
