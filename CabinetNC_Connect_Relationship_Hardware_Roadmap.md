@@ -859,10 +859,10 @@ Completed:
 Optional follow-up (not blocking M6):
   ✅ real Overhead pair face verify in Fusion — Batch C SEALED (BP↔FP0, 2026-07-09)
   ✅ offline Overhead BP↔FP0 face_verified on generator golden (Batch C offline)
-  ❌ BRep face bounds refinement beyond axis-aligned v1
+  ✅ BRep face bounds v1.1 — per-face edge-sample AABB (2026-07-11)
   ✅ General Tall generator_declared offline (2026-07-11; 4 rail→deck joints)
-  ❌ Kitchen generator_declared (see M6 next extension)
-  ❌ BRep face bounds refinement beyond axis-aligned v1
+  ✅ Kitchen generator_declared offline (2026-07-11; B1/B2→B3)
+  ❌ Lounge / Fridge generator_declared
 ```
 
 ## Goal
@@ -1284,14 +1284,17 @@ Post-M9 scaffold hardware lane is complete.
 - **Default verify path (productized 2026-07-11):** inspect auto-reconciles declarations; match → cut-ready; else 面验证; `manual_confirm` under 开发工具 only.
 - **Connect UI hardware params** are editable per type.
 - **General Tall `generator_declared`:** offline sealed 2026-07-11 (4 rail→deck joints; bridge emit + reconcile + cut plan).
-- Remaining truth gaps: BRep face-bounds refinement; `generator_declared` on Kitchen; NC consumers of writeback (none yet).
+- **Kitchen `generator_declared`:** offline sealed 2026-07-11 (2 bottom rail→deck joints).
+- **BRep face bounds v1.1:** Fusion faces use per-face edge-sample AABB (clamped to panel), not full panel bbox.
+- **Real-cabinet hardware offline:** all 5 types preview+cut-plan on Overhead BP↔D0 declared joint.
+- Remaining truth gaps: Lounge/Fridge `generator_declared`; NC consumers of writeback (none yet).
 
 Next options:
-1. Kitchen `generator_declared`
-2. BRep face bounds refinement (axis-aligned v1 ceiling)
-3. Real-cabinet hardware smokes (per type, no new types)
+1. Lounge / Fridge `generator_declared` (optional)
+2. Fusion Play smokes for Kitchen/GT declared on live assemblies
+3. Further face-bounds refinements (parametric loops)
 
-Checklist: `docs/connect-batch-c-checklist.md` · `docs/connect-post-m9-hardware-type-ui-checklist.md` · `docs/connect-post-m9-scaffold-hardware-checklist.md`
+Checklist: `docs/connect-batch-c-checklist.md` · `docs/connect-post-m9-hardware-type-ui-checklist.md` · `docs/connect-post-m9-scaffold-hardware-checklist.md` · `docs/connect-real-cabinet-hardware-checklist.md` · `docs/connect-m5-face-verification-checklist.md`
 
 M7 reference (sealed):
 - Checklist: docs/connect-m7-formal-ui-checklist.md

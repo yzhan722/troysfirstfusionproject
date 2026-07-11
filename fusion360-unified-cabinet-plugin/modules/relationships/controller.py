@@ -404,10 +404,12 @@ class RelationshipsController:
             import generator_declared_relationships
             import generator_declared_service
             import general_tall_declared_relationships
+            import kitchen_declared_relationships
             import overhead_declared_relationships
 
             importlib.reload(overhead_declared_relationships)
             importlib.reload(general_tall_declared_relationships)
+            importlib.reload(kitchen_declared_relationships)
             importlib.reload(generator_declared_relationships)
             importlib.reload(generator_declared_service)
             reconcile_fn = generator_declared_service.reconcile_generator_declarations

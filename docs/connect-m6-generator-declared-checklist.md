@@ -1,7 +1,7 @@
 # M6 Generator-Declared Relationships Checklist
 
 **Milestone:** M6 — Generator-Declared Relationships  
-**Status:** ✅ **SEALED** (Overhead v1 — 2026-07-05; General Tall extension offline — 2026-07-11)
+**Status:** ✅ **SEALED** (Overhead v1 — 2026-07-05; General Tall + Kitchen extensions offline — 2026-07-11)
 
 ---
 
@@ -24,11 +24,24 @@ Offline-ready (same pattern as Overhead):
 - Emit: `modules/generalTallCabinet/relationshipDeclarations.ts`
 - Catalog: `modules/relationships/general_tall_declared_relationships.py`
 - Service dispatch: `generator_declared_service.py` (`ohc.` / `gtc.` scope)
-- Offline: `tests/test_generator_declared_relationships.py` (4 GT tests) + full plugin regression ALL PASS
+- Offline: `tests/test_generator_declared_relationships.py` (4 GT tests)
 
 Not declared (by design): V1↔B1/T1 intersection; B1↔B2 / T1↔T2 surface stacks.
 
-Fusion Play for GT reconcile on a live assembly is optional follow-up (not blocking Kitchen extension).
+---
+
+## Extension: Kitchen (2026-07-11)
+
+Offline-ready (same pattern as Overhead / General Tall):
+
+- Kitchen skeleton declares 2 bottom rail→deck joints: B1↔B3, B2↔B3
+- Emit: `modules/kitchenCabinet/relationshipDeclarations.ts`
+- Catalog: `modules/relationships/kitchen_declared_relationships.py`
+- Service dispatch: `generator_declared_service.py` (`kc.` scope)
+- Fusion: kitchen assembly writes `relationshipDeclarations` attribute
+- Offline: `tests/test_generator_declared_relationships.py` (4 Kitchen tests)
+
+Not declared (by design): top strip-to-deck (intersection on kitchen_base); B1↔B2 surface stack; strip joints.
 
 ---
 
@@ -83,15 +96,17 @@ JSON: `tests/output/m6_fusion_smoke_results.json`
 - [x] Write declarations to assembly component attribute on Fusion body create
 - [x] Reconcile loads embedded declarations from assembly (fallback: Python catalog)
 - [x] General Tall emit + Python catalog + reconcile offline (2026-07-11)
+- [x] Kitchen emit + Python catalog + reconcile offline (2026-07-11)
 
 ---
 
 ## After M6 (next milestones)
 
 1. ~~**General Tall** — same declaration + reconcile pattern~~ ✅ offline 2026-07-11
-2. **Kitchen** — next generator declaration extension
-3. **M7 Formal Connect UI** — product-facing relationship/hardware UI (sealed)
-4. **M8 Panel Metadata Writeback** — body-level `features[]` sync after cut (sealed)
-5. **M9 Expand Hardware Types** — tongue/groove, hinge, lock, runner (sealed)
+2. ~~**Kitchen** — same declaration + reconcile pattern~~ ✅ offline 2026-07-11
+3. **Lounge / Fridge** — later generator declaration extensions
+4. **M7 Formal Connect UI** — product-facing relationship/hardware UI (sealed)
+5. **M8 Panel Metadata Writeback** — body-level `features[]` sync after cut (sealed)
+6. **M9 Expand Hardware Types** — tongue/groove, hinge, lock, runner (sealed)
 
 See [`CabinetNC_Connect_Relationship_Hardware_Roadmap.md`](../CabinetNC_Connect_Relationship_Hardware_Roadmap.md).

@@ -1327,6 +1327,17 @@ def create_assembly_panel_bodies_from_kitchen_result(fusion, result, run_label=N
     }
     if container_warning:
         warnings.append(container_warning)
+    declarations = result.get("relationshipDeclarations") if isinstance(result, dict) else None
+    if isinstance(declarations, list) and declarations and component is not root:
+        try:
+            component.attributes.add(
+                ATTRIBUTE_GROUP,
+                "relationshipDeclarations",
+                json.dumps(declarations, ensure_ascii=False, separators=(",", ":")),
+            )
+            placement_debug["relationshipDeclarationCount"] = len(declarations)
+        except Exception as ex:
+            warnings.append("Could not write relationshipDeclarations on assembly: {}".format(ex))
 
     for entry in entries:
         try:

@@ -139,6 +139,21 @@ class FaceVerificationTests(unittest.TestCase):
         self.assertIsNotNone(validate_relationship_for_cut(rel))
         self.assertIsNotNone(assert_safe_for_cut(rel))
 
+    def test_brep_bounds_helpers_clamp_and_aabb(self):
+        from face_verification_fusion import bounds_mm_from_points, clamp_bounds_to_panel
+
+        bounds = bounds_mm_from_points([(0, 0, 0), (100, 40, 5), (20, 10, 2)])
+        self.assertEqual(bounds["x0"], 0)
+        self.assertEqual(bounds["x1"], 100)
+        self.assertEqual(bounds["y0"], 0)
+        self.assertEqual(bounds["y1"], 40)
+        panel = {"x0": 10, "x1": 90, "y0": 5, "y1": 50, "z0": 0, "z1": 10}
+        clamped = clamp_bounds_to_panel(bounds, panel)
+        self.assertEqual(clamped["x0"], 10)
+        self.assertEqual(clamped["x1"], 90)
+        self.assertEqual(clamped["y0"], 5)
+        self.assertEqual(clamped["y1"], 40)
+
 
 if __name__ == "__main__":
     unittest.main()

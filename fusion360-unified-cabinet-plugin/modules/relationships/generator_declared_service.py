@@ -10,6 +10,11 @@ from general_tall_declared_relationships import (
     detect_general_tall_generator,
     resolve_declarations_for_panels as resolve_general_tall_declarations,
 )
+from kitchen_declared_relationships import (
+    GENERATOR_NAME as KITCHEN_GENERATOR,
+    detect_kitchen_generator,
+    resolve_declarations_for_panels as resolve_kitchen_declarations,
+)
 from overhead_declared_relationships import (
     GENERATOR_NAME as OVERHEAD_GENERATOR,
     detect_overhead_generator,
@@ -40,6 +45,8 @@ def load_declarations_for_panels(
             resolved_generator = OVERHEAD_GENERATOR
         elif detect_general_tall_generator(panel_ids):
             resolved_generator = GENERAL_TALL_GENERATOR
+        elif detect_kitchen_generator(panel_ids):
+            resolved_generator = KITCHEN_GENERATOR
     if resolved_generator == OVERHEAD_GENERATOR:
         return resolve_overhead_declarations(
             panel_ids,
@@ -54,6 +61,13 @@ def load_declarations_for_panels(
             preferred_run_token=preferred_run_token,
             embedded_declarations=embedded_declarations,
         )
+    if resolved_generator == KITCHEN_GENERATOR:
+        return resolve_kitchen_declarations(
+            panel_ids,
+            KITCHEN_GENERATOR,
+            preferred_run_token=preferred_run_token,
+            embedded_declarations=embedded_declarations,
+        )
     return []
 
 
@@ -64,10 +78,11 @@ def _scope_panels_to_run(
     token = str(preferred_run_token or "").strip()
     if not token:
         return dedupe_panel_snapshots(panels)
-    # Overhead uses ohc.{run}.; General Tall may use gtc.{run}. or bare ids.
+    # Overhead uses ohc.{run}.; General Tall may use gtc.{run}.; Kitchen may use kc.{run}.
     prefixes = (
         "ohc.{}.".format(token),
         "gtc.{}.".format(token),
+        "kc.{}.".format(token),
     )
     scoped = [
         panel

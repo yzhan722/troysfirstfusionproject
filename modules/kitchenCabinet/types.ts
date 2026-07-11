@@ -296,6 +296,7 @@ export interface KitchenGeometryResult {
   panelDxf: PanelDxfGeometry[];
   slotRequests: SlotRequest[];
   resolvedSlots: ResolvedSlot[];
+  relationshipDeclarations?: import("./relationshipDeclarations.ts").RelationshipDeclaration[];
   warnings: string[];
   errors: string[];
   debug: {

@@ -18,6 +18,7 @@ import type {
   VPanelGeometry,
   VPanelMachiningMode,
 } from "./types.ts";
+import { relationshipDeclarationsForBoards } from "./relationshipDeclarations.ts";
 
 export * from "./types.ts";
 
@@ -1371,6 +1372,7 @@ export function generateKitchenCabinetGeometry(rawState: KitchenLayoutState): Ki
   buildPanelBodies(boards, vPanels, resolvedSlots);
   const frontPanels = buildFrontPanels(columns, zones, state, warnings);
   const panelDxf = buildPanelDxf(boards, vPanels, cpt);
+  const relationshipDeclarations = relationshipDeclarationsForBoards(boards);
 
   return {
     params: state,
@@ -1383,6 +1385,7 @@ export function generateKitchenCabinetGeometry(rawState: KitchenLayoutState): Ki
     panelDxf,
     slotRequests,
     resolvedSlots,
+    relationshipDeclarations,
     warnings,
     errors,
     debug: {

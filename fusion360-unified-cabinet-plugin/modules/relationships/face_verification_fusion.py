@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import adsk.core as adsk_core
@@ -10,6 +10,9 @@ except Exception:
     adsk_core = None
 
 from face_verification import extract_axis_aligned_faces_from_panel
+
+# Skip near-axis-aligned filter below this |normal| component dominance.
+_AXIS_ALIGN_MIN = 0.99
 
 
 def _normalize_vector(vec) -> Optional[List[float]]:
@@ -63,11 +66,90 @@ def _classify_brep_face(normal: List[float], thickness_axis: str) -> str:
     return "EDGE"
 
 
+def _is_axis_aligned_normal(normal: List[float]) -> bool:
+    return max(abs(normal[0]), abs(normal[1]), abs(normal[2])) >= _AXIS_ALIGN_MIN
+
+
+def bounds_mm_from_points(points_mm: List[Tuple[float, float, float]]) -> Optional[Dict[str, float]]:
+    """AABB in mm from sampled world points. Pure helper for offline tests."""
+    if not points_mm:
+        return None
+    xs = [float(p[0]) for p in points_mm]
+    ys = [float(p[1]) for p in points_mm]
+    zs = [float(p[2]) for p in points_mm]
+    return {
+        "x0": min(xs),
+        "x1": max(xs),
+        "y0": min(ys),
+        "y1": max(ys),
+        "z0": min(zs),
+        "z1": max(zs),
+    }
+
+
+def clamp_bounds_to_panel(bounds: Dict[str, float], panel_bbox: Optional[Dict[str, Any]]) -> Dict[str, float]:
+    """Intersect face AABB with panel bbox when available."""
+    if not panel_bbox:
+        return dict(bounds)
+    out = dict(bounds)
+    for axis in ("x", "y", "z"):
+        lo_key = "{}0".format(axis)
+        hi_key = "{}1".format(axis)
+        if lo_key not in panel_bbox or hi_key not in panel_bbox:
+            continue
+        out[lo_key] = max(float(out[lo_key]), float(panel_bbox[lo_key]))
+        out[hi_key] = min(float(out[hi_key]), float(panel_bbox[hi_key]))
+        if out[lo_key] > out[hi_key]:
+            # Degenerate after clamp — keep original axis span.
+            out[lo_key] = float(bounds[lo_key])
+            out[hi_key] = float(bounds[hi_key])
+    return out
+
+
+def _sample_face_edge_points_mm(face, max_points: int = 64) -> List[Tuple[float, float, float]]:
+    """Sample world-mm points along face edge loops (Fusion-only)."""
+    points: List[Tuple[float, float, float]] = []
+    try:
+        for loop_index in range(face.loops.count):
+            loop = face.loops.item(loop_index)
+            for coedge_index in range(loop.coEdges.count):
+                coedge = loop.coEdges.item(coedge_index)
+                edge = getattr(coedge, "edge", None)
+                if edge is None:
+                    continue
+                try:
+                    evaluator = edge.evaluator
+                    extents = evaluator.getParameterExtents()
+                    if isinstance(extents, (tuple, list)) and len(extents) >= 3:
+                        start_param, end_param = extents[1], extents[2]
+                    else:
+                        continue
+                    steps = max(2, min(8, max_points - len(points)))
+                    for step in range(steps + 1):
+                        t = start_param + (end_param - start_param) * (step / float(steps))
+                        result = evaluator.getPointAtParameter(t)
+                        if isinstance(result, (tuple, list)) and len(result) >= 2:
+                            ok_pt, pt = result[0], result[1]
+                        else:
+                            ok_pt, pt = True, result
+                        if not ok_pt or pt is None:
+                            continue
+                        points.append((pt.x * 10.0, pt.y * 10.0, pt.z * 10.0))
+                        if len(points) >= max_points:
+                            return points
+                except Exception:
+                    continue
+    except Exception:
+        return points
+    return points
+
+
 def extract_brep_faces_from_body(body, panel: Dict[str, Any]) -> List[Dict[str, Any]]:
     if body is None or adsk_core is None:
         return []
     panel_id = str(panel.get("panelId") or getattr(body, "name", "") or "panel")
     thickness_axis = (panel.get("inferred") or {}).get("thicknessAxis") or "UNKNOWN"
+    panel_bbox = panel.get("bbox") if isinstance(panel.get("bbox"), dict) else None
     faces: List[Dict[str, Any]] = []
     try:
         for index in range(body.faces.count):
@@ -76,6 +158,17 @@ def extract_brep_faces_from_body(body, panel: Dict[str, Any]) -> List[Dict[str, 
             origin = _face_world_point_mm(face)
             if not normal or not origin:
                 continue
+            if not _is_axis_aligned_normal(normal):
+                continue
+            samples = _sample_face_edge_points_mm(face)
+            bounds = bounds_mm_from_points(samples)
+            if not bounds:
+                # Fallback: thin slab at origin using panel bbox span on other axes.
+                bounds = dict(panel_bbox or {})
+                if not bounds:
+                    continue
+            else:
+                bounds = clamp_bounds_to_panel(bounds, panel_bbox)
             face_id = "{}::BREP_{}".format(panel_id, index)
             faces.append(
                 {
@@ -84,9 +177,11 @@ def extract_brep_faces_from_body(body, panel: Dict[str, Any]) -> List[Dict[str, 
                     "faceClass": _classify_brep_face(normal, thickness_axis),
                     "normal": normal,
                     "planeOriginMm": origin,
-                    "boundsMm": dict(panel.get("bbox") or {}),
+                    "boundsMm": bounds,
                     "areaMm2": round(_face_area_mm2(face), 4),
                     "source": "fusion_brep",
+                    # ponytail: per-face AABB from edge samples (v1.1); upgrade path = parametric loops
+                    "boundsSource": "edge_sample_aabb" if samples else "panel_bbox_fallback",
                 }
             )
     except Exception:
