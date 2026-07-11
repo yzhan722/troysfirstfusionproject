@@ -403,15 +403,17 @@ class RelationshipsController:
 
             import generator_declared_relationships
             import generator_declared_service
+            import general_tall_declared_relationships
             import overhead_declared_relationships
 
             importlib.reload(overhead_declared_relationships)
+            importlib.reload(general_tall_declared_relationships)
             importlib.reload(generator_declared_relationships)
             importlib.reload(generator_declared_service)
             reconcile_fn = generator_declared_service.reconcile_generator_declarations
 
             tolerance_mm = self._float_param(payload, "toleranceMm", CONTACT_TOLERANCE_MM)
-            generator = str((payload or {}).get("generator") or "overhead").strip() or None
+            generator = str((payload or {}).get("generator") or "").strip() or None
             preferred_run = str((payload or {}).get("runLabel") or (payload or {}).get("preferredRunToken") or "").strip() or None
             assembly_name = str((payload or {}).get("assemblyComponentName") or "").strip() or None
             bbox_source = str((payload or {}).get("bboxSource") or "design_preferred").strip() or "design_preferred"

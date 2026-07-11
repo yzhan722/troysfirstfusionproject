@@ -1,7 +1,7 @@
 # M6 Generator-Declared Relationships Checklist
 
 **Milestone:** M6 — Generator-Declared Relationships  
-**Status:** ✅ **SEALED** (Overhead v1 — 2026-07-05)
+**Status:** ✅ **SEALED** (Overhead v1 — 2026-07-05; General Tall extension offline — 2026-07-11)
 
 ---
 
@@ -16,6 +16,22 @@
 
 ---
 
+## Extension: General Tall (2026-07-11)
+
+Offline-ready (same pattern as Overhead):
+
+- GT skeleton declares 4 rail→deck joints: B1↔B3, T1↔T3, B2↔B3, T2↔T3
+- Emit: `modules/generalTallCabinet/relationshipDeclarations.ts`
+- Catalog: `modules/relationships/general_tall_declared_relationships.py`
+- Service dispatch: `generator_declared_service.py` (`ohc.` / `gtc.` scope)
+- Offline: `tests/test_generator_declared_relationships.py` (4 GT tests) + full plugin regression ALL PASS
+
+Not declared (by design): V1↔B1/T1 intersection; B1↔B2 / T1↔T2 surface stacks.
+
+Fusion Play for GT reconcile on a live assembly is optional follow-up (not blocking Kitchen extension).
+
+---
+
 ## Runners
 
 > **Note (2026-07-05):** One-click smoke scripts (`connect_pipeline_smoke`, `contact_patch_smoke`) removed. M6 seal used historical Fusion smoke JSON; ongoing verification uses offline regression + manual Fusion reconcile flow.
@@ -25,7 +41,7 @@
 | `tests/run_plugin_offline_regression.py` | Terminal — full offline regression |
 | `tests/run_generator_relationship_regression.py` | Generator declared-relationship matrix |
 | `tests/run_connect_demo_pack_offline.py` | Connect demo pack (includes Overhead structural joint) |
-| **CabinetNC palette → Debug** | Fusion — generate Overhead → Reconcile Declarations → cut |
+| **CabinetNC palette → Debug** | Fusion — generate Overhead/GT → Reconcile Declarations → cut |
 
 ```powershell
 cd fusion360-unified-cabinet-plugin
@@ -66,14 +82,16 @@ JSON: `tests/output/m6_fusion_smoke_results.json`
 - [x] Emit declarations from Overhead generation JSON (`modules/overheadCabinet/relationshipDeclarations.ts`)
 - [x] Write declarations to assembly component attribute on Fusion body create
 - [x] Reconcile loads embedded declarations from assembly (fallback: Python catalog)
+- [x] General Tall emit + Python catalog + reconcile offline (2026-07-11)
 
 ---
 
 ## After M6 (next milestones)
 
-1. **General Tall** — same declaration + reconcile pattern (M6 extension, not blocking M7)
-2. **M7 Formal Connect UI** — product-facing relationship/hardware UI
-3. **M8 Panel Metadata Writeback** — body-level `features[]` sync after cut
-4. **M9 Expand Hardware Types** — tongue/groove, hinge, lock, runner
+1. ~~**General Tall** — same declaration + reconcile pattern~~ ✅ offline 2026-07-11
+2. **Kitchen** — next generator declaration extension
+3. **M7 Formal Connect UI** — product-facing relationship/hardware UI (sealed)
+4. **M8 Panel Metadata Writeback** — body-level `features[]` sync after cut (sealed)
+5. **M9 Expand Hardware Types** — tongue/groove, hinge, lock, runner (sealed)
 
 See [`CabinetNC_Connect_Relationship_Hardware_Roadmap.md`](../CabinetNC_Connect_Relationship_Hardware_Roadmap.md).

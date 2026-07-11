@@ -5,10 +5,15 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Set
 
 from generator_declared_relationships import build_reconcile_report, reconcile_declarations_with_geometry
+from general_tall_declared_relationships import (
+    GENERATOR_NAME as GENERAL_TALL_GENERATOR,
+    detect_general_tall_generator,
+    resolve_declarations_for_panels as resolve_general_tall_declarations,
+)
 from overhead_declared_relationships import (
-    GENERATOR_NAME,
+    GENERATOR_NAME as OVERHEAD_GENERATOR,
     detect_overhead_generator,
-    resolve_declarations_for_panels,
+    resolve_declarations_for_panels as resolve_overhead_declarations,
 )
 from relationship_geometry import CONTACT_TOLERANCE_MM
 from relationship_models import PanelSnapshot
@@ -29,17 +34,23 @@ def load_declarations_for_panels(
     panel_ids = panel_ids_from_snapshots(panels)
     if not panel_ids:
         return []
-    if generator:
-        return resolve_declarations_for_panels(
+    resolved_generator = str(generator or "").strip() or None
+    if not resolved_generator:
+        if detect_overhead_generator(panel_ids):
+            resolved_generator = OVERHEAD_GENERATOR
+        elif detect_general_tall_generator(panel_ids):
+            resolved_generator = GENERAL_TALL_GENERATOR
+    if resolved_generator == OVERHEAD_GENERATOR:
+        return resolve_overhead_declarations(
             panel_ids,
-            generator,
+            OVERHEAD_GENERATOR,
             preferred_run_token=preferred_run_token,
             embedded_declarations=embedded_declarations,
         )
-    if detect_overhead_generator(panel_ids):
-        return resolve_declarations_for_panels(
+    if resolved_generator == GENERAL_TALL_GENERATOR:
+        return resolve_general_tall_declarations(
             panel_ids,
-            GENERATOR_NAME,
+            GENERAL_TALL_GENERATOR,
             preferred_run_token=preferred_run_token,
             embedded_declarations=embedded_declarations,
         )
@@ -53,8 +64,16 @@ def _scope_panels_to_run(
     token = str(preferred_run_token or "").strip()
     if not token:
         return dedupe_panel_snapshots(panels)
-    prefix = "ohc.{}.".format(token)
-    scoped = [panel for panel in panels if str(panel.panelId or "").startswith(prefix)]
+    # Overhead uses ohc.{run}.; General Tall may use gtc.{run}. or bare ids.
+    prefixes = (
+        "ohc.{}.".format(token),
+        "gtc.{}.".format(token),
+    )
+    scoped = [
+        panel
+        for panel in panels
+        if any(str(panel.panelId or "").startswith(prefix) for prefix in prefixes)
+    ]
     if not scoped:
         scoped = [panel for panel in panels if token in panel.panelId]
     if scoped:
@@ -99,7 +118,7 @@ def reconcile_generator_declarations(
         tolerance_mm=tolerance_mm,
         include_none=include_none,
     )
-    resolved_generator = str(declarations[0].get("generator") or generator or GENERATOR_NAME)
+    resolved_generator = str(declarations[0].get("generator") or generator or OVERHEAD_GENERATOR)
     reconcile_result = reconcile_declarations_with_geometry(declarations, geometry_relationships)
     return build_reconcile_report(
         generator=resolved_generator,

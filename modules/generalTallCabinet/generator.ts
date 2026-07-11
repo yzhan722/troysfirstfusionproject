@@ -1,4 +1,5 @@
 import { calculateZStacking } from "./stackingCalculator.ts";
+import { relationshipDeclarationsForBoards } from "./relationshipDeclarations.ts";
 import type {
   Board,
   BoardFeature,
@@ -2976,6 +2977,7 @@ export function generateGeneralTallCabinet(inputParams: GeneralTallCabinetParams
   applyCoreBoardXOffset(boards, debug, params);
   updateSidePanelOverlapAudit(boards, debug);
   const frontPanels = buildGeneralTallFrontPanels(inputParams, stacking.items, boards, debug, validation);
+  const relationshipDeclarations = relationshipDeclarationsForBoards(boards);
 
   return {
     boards,
@@ -2986,6 +2988,7 @@ export function generateGeneralTallCabinet(inputParams: GeneralTallCabinetParams
     validation,
     warnings: validation.warnings,
     debug,
+    relationshipDeclarations,
   };
 }
 

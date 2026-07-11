@@ -860,7 +860,9 @@ Optional follow-up (not blocking M6):
   ✅ real Overhead pair face verify in Fusion — Batch C SEALED (BP↔FP0, 2026-07-09)
   ✅ offline Overhead BP↔FP0 face_verified on generator golden (Batch C offline)
   ❌ BRep face bounds refinement beyond axis-aligned v1
-  ❌ General Tall / Kitchen generator_declared (see M6 next extension)
+  ✅ General Tall generator_declared offline (2026-07-11; 4 rail→deck joints)
+  ❌ Kitchen generator_declared (see M6 next extension)
+  ❌ BRep face bounds refinement beyond axis-aligned v1
 ```
 
 ## Goal
@@ -992,8 +994,10 @@ Completed:
   ✅ assembly component attribute + reconcile loads embedded declarations
 
 Next extension (not blocking M7):
-  ❌ General Tall / Kitchen / Lounge / Fridge generators
+  ✅ General Tall offline (2026-07-11) — B1/B2/T1/T2 → B3/T3 rail-to-deck
+  ❌ Kitchen / Lounge / Fridge generators
 ```
+
 
 ## Goal
 
@@ -1279,11 +1283,13 @@ Post-M9 scaffold hardware lane is complete.
 - **Near-contact is cut-eligible** after verify (same cut gate as flush contact).
 - **Default verify path:** `generator_declared` (when present) → else `face_verified` → `manual_confirm` debug-only.
 - **Connect UI hardware params** are editable per type.
-- Remaining truth gaps: BRep face-bounds refinement; `generator_declared` on General Tall / Kitchen; NC consumers of writeback (none yet).
+- **General Tall `generator_declared`:** offline sealed 2026-07-11 (4 rail→deck joints; bridge emit + reconcile + cut plan).
+- Remaining truth gaps: BRep face-bounds refinement; `generator_declared` on Kitchen; NC consumers of writeback (none yet).
 
 Next options:
-1. General Tall `generator_declared` (design-intent joints beyond Overhead)
-2. BRep face bounds refinement (axis-aligned v1 ceiling)
+1. Connect default verify path productization (`generator_declared` → `face_verified` → `manual_confirm` debug-only)
+2. Kitchen `generator_declared`
+3. BRep face bounds refinement (axis-aligned v1 ceiling)
 
 Checklist: `docs/connect-batch-c-checklist.md` · `docs/connect-post-m9-hardware-type-ui-checklist.md` · `docs/connect-post-m9-scaffold-hardware-checklist.md`
 

@@ -426,6 +426,8 @@ export interface GtFrontHardwareSettings {
   defaultHingeSettings: GtHingeSettings;
 }
 
+import type { RelationshipDeclaration } from "./relationshipDeclarations.ts";
+
 export interface GeneralTallCabinetResult {
   boards: Board[];
   features: BoardFeature[];
@@ -435,4 +437,5 @@ export interface GeneralTallCabinetResult {
   validation: BoundaryValidation;
   warnings: string[];
   debug: GeneralTallCabinetDebug;
+  relationshipDeclarations: RelationshipDeclaration[];
 }
