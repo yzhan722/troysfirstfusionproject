@@ -123,8 +123,9 @@ def main() -> int:
     for route in (
         "hardware.listHardwareTypes",
         "hardware.previewHardwareFromRelationship",
-        "hardware.createHardwareFromRelationship",
-    ):
+            "hardware.createHardwareFromRelationship",
+            "hardware.createHardwareForCutSafeRelationships",
+        ):
         if route not in text:
             return _fail("plugin route missing", route)
     print("[PASS] UnifiedCabinetPlugin generic hardware routes registered")
@@ -149,6 +150,9 @@ def main() -> int:
         "connectUiVerifyAllBboxCandidates",
         "relationshipFaceVerifyBatchResult",
         "relationships.verifyAllBboxCandidates",
+        'id="connectBatchCutBtn"',
+        "connectUiBatchCutHardware",
+        "hardware.createHardwareForCutSafeRelationships",
     ):
         if token not in palette:
             return _fail("palette missing", token)

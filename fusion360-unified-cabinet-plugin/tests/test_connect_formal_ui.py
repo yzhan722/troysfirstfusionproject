@@ -105,7 +105,7 @@ class ConnectFormalUiTests(unittest.TestCase):
         cut_gate = evaluate_connect_action("cut", confirmed)
         self.assertTrue(cut_gate["ok"])
 
-    def test_surface_to_surface_preview_only_no_confirm(self):
+    def test_surface_to_surface_confirm_allowed_when_roles_present(self):
         scan = _fixture_scan()
         rel = next(
             item
@@ -113,7 +113,11 @@ class ConnectFormalUiTests(unittest.TestCase):
             if item.get("geometryType") == "surface_to_surface"
         )
         self.assertTrue(is_preview_allowed(rel))
-        self.assertFalse(evaluate_connect_action("confirm", rel)["ok"])
+        roles = rel.get("roles") or {}
+        self.assertTrue(roles.get("hostPanelId"))
+        self.assertTrue(roles.get("targetPanelId"))
+        self.assertTrue(evaluate_connect_action("preview", rel)["ok"])
+        self.assertTrue(evaluate_connect_action("confirm", rel)["ok"])
         self.assertFalse(evaluate_connect_action("cut", rel)["ok"])
 
     def test_merge_declared_relationships_overlays_verification(self):

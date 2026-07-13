@@ -458,6 +458,138 @@ class HardwareController:
                 "trace": traceback.format_exc(),
             }
 
+    def create_hardware_for_cut_safe_relationships(self, payload, palette):
+        """3c: batch-cut current hardware type on all cut-safe contact joints."""
+        try:
+            from batch_hardware_from_relationships import (
+                BATCH_CUT_ACTION,
+                DEFAULT_BATCH_CUT_MAX_PAIRS,
+                batch_cut_reminder_lines,
+                filter_cut_safe_hardware_candidates,
+                summarize_cut_skip,
+            )
+            from panel_metadata_writeback import read_panel_metadata_from_body
+
+            if not isinstance(payload, dict):
+                return "hardwareBatchCutResult", {
+                    "ok": False,
+                    "action": BATCH_CUT_ACTION,
+                    "errors": ["Missing batch cut payload."],
+                }
+
+            rule = payload.get("rule") if isinstance(payload.get("rule"), dict) else {"type": "screw_hole"}
+            hw_type = normalize_hardware_type(rule)
+            try:
+                max_pairs = int(payload.get("maxPairs", DEFAULT_BATCH_CUT_MAX_PAIRS))
+            except Exception:
+                max_pairs = DEFAULT_BATCH_CUT_MAX_PAIRS
+            max_pairs = max(0, max_pairs)
+
+            relationships = payload.get("relationships")
+            if not isinstance(relationships, list):
+                relationships = None
+
+            if relationships is None:
+                root = self.fusion.get_root_component() if self.fusion else None
+                if not root:
+                    return "hardwareBatchCutResult", {
+                        "ok": False,
+                        "action": BATCH_CUT_ACTION,
+                        "errors": ["No active Fusion design."],
+                    }
+                from modules.relationships.relationship_service import (
+                    RelationshipService,
+                    build_panel_snapshot,
+                    collect_panel_bodies,
+                    scan_relationships,
+                )
+                from relationship_verification_store import hydrate_relationships_from_panel_metadata
+
+                service = RelationshipService(self.fusion)
+                bodies = collect_panel_bodies(root)
+                body_by_id = {}
+                panels = []
+                for body in bodies or []:
+                    snap = build_panel_snapshot(body, bbox_source="physical")
+                    panel_id = str(getattr(snap, "panelId", "") or "").strip()
+                    if not panel_id or panel_id in body_by_id:
+                        continue
+                    body_by_id[panel_id] = body
+                    panels.append(snap)
+                _panel_list, rel_objs = scan_relationships(panels, include_none=False)
+                rel_dicts = [rel.to_dict() for rel in rel_objs]
+                meta_by_id = {}
+                for panel_id, body in body_by_id.items():
+                    meta, _err = read_panel_metadata_from_body(body)
+                    if isinstance(meta, dict):
+                        meta_by_id[panel_id] = meta
+                if meta_by_id:
+                    rel_dicts = hydrate_relationships_from_panel_metadata(rel_dicts, meta_by_id)
+                relationships = rel_dicts
+
+            candidates = filter_cut_safe_hardware_candidates(list(relationships or []))
+            capped = len(candidates) > max_pairs
+            to_process = candidates[:max_pairs] if max_pairs else []
+            overflow = candidates[max_pairs:] if capped else []
+
+            created = []
+            skipped = [summarize_cut_skip(rel, "cap_reached", ["Batch maxPairs={} exceeded.".format(max_pairs)]) for rel in overflow]
+
+            for rel in to_process:
+                try:
+                    _event, cut_report = self.create_hardware_from_relationship(
+                        {"relationship": rel, "rule": dict(rule)},
+                        palette,
+                    )
+                except Exception as ex:
+                    skipped.append(summarize_cut_skip(rel, "cut_exception", [str(ex)]))
+                    continue
+                if not isinstance(cut_report, dict) or not cut_report.get("ok"):
+                    errors = list((cut_report or {}).get("errors") or ["Cut failed."])
+                    skipped.append(summarize_cut_skip(rel, "cut_failed", errors))
+                    continue
+                created.append(
+                    {
+                        "relationshipId": str(rel.get("relationshipId") or ""),
+                        "hardwareType": cut_report.get("hardwareType") or hw_type,
+                        "cutFeatureName": cut_report.get("cutFeatureName")
+                        or cut_report.get("tongueFeatureName")
+                        or "",
+                        "panelWriteback": cut_report.get("panelWriteback"),
+                    }
+                )
+
+            return "hardwareBatchCutResult", {
+                "ok": True,
+                "action": BATCH_CUT_ACTION,
+                "cutGateUnchanged": True,
+                "hardwareType": hw_type,
+                "rule": dict(rule),
+                "maxPairs": max_pairs,
+                "candidateCount": len(candidates),
+                "processedCount": len(to_process),
+                "createdCount": len(created),
+                "skippedCount": len(skipped),
+                "created": created,
+                "skipped": skipped,
+                "reminders": batch_cut_reminder_lines(
+                    hardware_type=hw_type,
+                    created_count=len(created),
+                    skipped=skipped,
+                    capped=capped,
+                    candidate_count=len(candidates),
+                ),
+                "errors": [],
+                "warnings": [],
+            }
+        except Exception as ex:
+            return "hardwareBatchCutResult", {
+                "ok": False,
+                "action": "hardware.createHardwareForCutSafeRelationships",
+                "errors": [str(ex)],
+                "trace": traceback.format_exc(),
+            }
+
     def preview_hinge_holes_from_relationship(self, payload, _palette):
         try:
             if not isinstance(payload, dict):

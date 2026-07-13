@@ -35,6 +35,7 @@ class RelationshipsController:
                 include_none=include_none,
                 expected_fixtures=expected,
             )
+            report = self._hydrate_scan_report_verifications(report)
             return "relationshipScanResult", report
         except Exception as ex:
             return "relationshipScanResult", {
@@ -54,6 +55,7 @@ class RelationshipsController:
                 tolerance_mm=tolerance_mm,
                 include_none=include_none,
             )
+            report = self._hydrate_scan_report_verifications(report)
             return "relationshipScanResult", report
         except Exception as ex:
             return "relationshipScanResult", {
@@ -387,6 +389,26 @@ class RelationshipsController:
                 verify_report["relationship"] = verified_relationship
                 verify_report["verification"] = verified_relationship.get("verification")
                 verify_report["faceMatch"] = verified_relationship.get("faceMatch")
+                try:
+                    from relationship_verification_store import persist_face_verification_to_pair_bodies
+
+                    persist_report = persist_face_verification_to_pair_bodies(
+                        panel_bodies[0],
+                        panel_bodies[1],
+                        verified_relationship,
+                        face_match=verify_report.get("faceMatch"),
+                        panel_a_id=panels[0].panelId,
+                        panel_b_id=panels[1].panelId,
+                    )
+                    verify_report["verificationPersisted"] = persist_report.get("ok")
+                    verify_report["verificationPersist"] = persist_report
+                    if persist_report.get("errors"):
+                        verify_report.setdefault("warnings", []).extend(persist_report["errors"])
+                except Exception as persist_ex:
+                    verify_report["verificationPersisted"] = False
+                    verify_report.setdefault("warnings", []).append(
+                        "Face verification persist failed: {}".format(persist_ex)
+                    )
 
             return "relationshipFaceVerifyResult", verify_report
         except Exception as ex:
@@ -462,6 +484,19 @@ class RelationshipsController:
             )
             panel_map = {panel.panelId: panel.to_dict() for panel in panel_list}
             rel_dicts = [rel.to_dict() for rel in relationships]
+            try:
+                from relationship_verification_store import hydrate_relationships_from_panel_metadata
+                from panel_metadata_writeback import read_panel_metadata_from_body
+
+                meta_by_id = {}
+                for panel_id, body in body_by_id.items():
+                    meta, _err = read_panel_metadata_from_body(body)
+                    if isinstance(meta, dict):
+                        meta_by_id[panel_id] = meta
+                if meta_by_id:
+                    rel_dicts = hydrate_relationships_from_panel_metadata(rel_dicts, meta_by_id)
+            except Exception:
+                pass
 
             def extract_faces(panel_dict):
                 panel_id = str((panel_dict or {}).get("panelId") or "").strip()
@@ -476,6 +511,31 @@ class RelationshipsController:
                 tolerance_mm=tolerance_mm,
                 max_pairs=max_pairs,
                 extract_faces=extract_faces,
+            )
+            persisted = []
+            try:
+                from relationship_verification_store import persist_face_verification_to_pair_bodies
+
+                for verified in report.get("verifiedRelationships") or []:
+                    if not isinstance(verified, dict):
+                        continue
+                    panel_a_id = str((verified.get("panelA") or {}).get("panelId") or "").strip()
+                    panel_b_id = str((verified.get("panelB") or {}).get("panelId") or "").strip()
+                    persist_report = persist_face_verification_to_pair_bodies(
+                        body_by_id.get(panel_a_id),
+                        body_by_id.get(panel_b_id),
+                        verified,
+                        face_match=verified.get("faceMatch"),
+                        panel_a_id=panel_a_id,
+                        panel_b_id=panel_b_id,
+                    )
+                    persisted.append(persist_report)
+            except Exception as persist_ex:
+                report.setdefault("warnings", []).append(
+                    "Batch verification persist failed: {}".format(persist_ex)
+                )
+            report["verificationPersistedCount"] = sum(
+                1 for item in persisted if item.get("ok")
             )
             report["panelCount"] = len(panel_list)
             report["relationshipCount"] = len(rel_dicts)
@@ -805,3 +865,48 @@ class RelationshipsController:
             if hasattr(entity, "isSolid") and entity.isSolid:
                 bodies.append(entity)
         return bodies
+
+    def _hydrate_scan_report_verifications(self, report: Dict[str, Any]) -> Dict[str, Any]:
+        """Restore face_verified marks from panel metadata onto scan relationships."""
+        if not isinstance(report, dict):
+            return report
+        relationships = report.get("relationships")
+        if not isinstance(relationships, list) or not relationships:
+            return report
+        try:
+            from panel_metadata_writeback import read_panel_metadata_from_body
+            from relationship_service import build_panel_snapshot, collect_panel_bodies
+            from relationship_verification_store import hydrate_relationships_from_panel_metadata
+
+            root = self.service._root_component()
+            if not root:
+                return report
+            body_by_id = {}
+            for body in collect_panel_bodies(root) or []:
+                snap = build_panel_snapshot(body)
+                panel_id = str(getattr(snap, "panelId", "") or "").strip()
+                if panel_id and panel_id not in body_by_id:
+                    body_by_id[panel_id] = body
+            meta_by_id = {}
+            for panel_id, body in body_by_id.items():
+                meta, _err = read_panel_metadata_from_body(body)
+                if isinstance(meta, dict):
+                    meta_by_id[panel_id] = meta
+            if not meta_by_id:
+                return report
+            hydrated = hydrate_relationships_from_panel_metadata(list(relationships), meta_by_id)
+            updated = dict(report)
+            updated["relationships"] = hydrated
+            updated["verificationHydratedCount"] = sum(
+                1
+                for rel in hydrated
+                if isinstance(rel, dict)
+                and (rel.get("verification") or {}).get("level") == "face_verified"
+                and any(
+                    "Restored face_verified" in str(note)
+                    for note in (rel.get("auditNotes") or [])
+                )
+            )
+            return updated
+        except Exception:
+            return report

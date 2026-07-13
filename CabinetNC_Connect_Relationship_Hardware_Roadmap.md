@@ -132,6 +132,13 @@ Batch face verify 3a (SEALED 2026-07-11):
   ✅ Fusion: verify_all_connect_smoke PASS (4/4), then remove --batch verifyall
   ✅ hardware cut/preview re-plan from physical bboxes (OH postprocess Z shifts)
   📄 docs/connect-batch-face-verify-checklist.md
+
+Batch hardware cut 3c (2026-07-12):
+  ✅ filter cut-safe edge_to_surface structural joints; maxPairs=50
+  ✅ hardware.createHardwareForCutSafeRelationships (skip+remind)
+  ✅ Connect「批量创建五金」uses current type/params
+  ✅ face_verified persistence hydrate feeds the cut pool
+  ✅ offline: run_batch_hardware_cut_offline.py
 ```
 
 Current relationship layer is **not production-truth**. It is currently:

@@ -35,8 +35,10 @@ def main() -> int:
 
     candidates = filter_face_verifiable_candidates(rels)
     if not candidates:
-        return _fail("filter candidates", "expected at least one edge_to_surface bbox candidate")
+        return _fail("filter candidates", "expected at least one contact hardware bbox candidate")
     print("[PASS] filter candidates={}".format(len(candidates)))
+    geometries = sorted({str(item.get("geometryType") or "") for item in candidates})
+    print("[PASS] candidate geometries={}".format(geometries))
 
     # Unfiltered bbox must still be blocked for cut
     sample = candidates[0]

@@ -6,6 +6,23 @@ from typing import Any, Dict, List, Optional, Set
 
 CUT_SAFE_LEVELS: Set[str] = {"manual_confirmed", "face_verified", "generator_declared", "cut_approved"}
 
+# Contact joints eligible for hardware preview / confirm / batch verify+cut.
+CONTACT_HARDWARE_PAIRS: Set[tuple] = {
+    ("edge_to_surface", "structural_butt_joint"),
+    ("surface_to_surface", "face_contact"),
+}
+
+
+def is_contact_hardware_pair(relationship: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(relationship, dict):
+        return False
+    pair = (
+        str(relationship.get("geometryType") or ""),
+        str(relationship.get("relationshipType") or ""),
+    )
+    return pair in CONTACT_HARDWARE_PAIRS
+
+
 VERIFICATION_UI: Dict[str, Dict[str, Any]] = {
     "bbox_contact_patch": {
         "label": "BBox contact patch",
@@ -94,11 +111,14 @@ def evaluate_connect_action(action: str, relationship: Optional[Dict[str, Any]])
                 "action": action_key,
                 "errors": ["Relationship is not eligible for hardware preview."],
             }
-        if relationship.get("geometryType") != "edge_to_surface":
+        if not is_contact_hardware_pair(relationship):
             return {
                 "ok": False,
                 "action": action_key,
-                "errors": ["Only edge_to_surface relationships support hardware preview."],
+                "errors": [
+                    "Only contact hardware pairs support preview "
+                    "(edge_to_surface/structural_butt_joint or surface_to_surface/face_contact)."
+                ],
             }
         roles = relationship.get("roles") or {}
         if not roles.get("hostPanelId") or not roles.get("targetPanelId"):
@@ -106,10 +126,15 @@ def evaluate_connect_action(action: str, relationship: Optional[Dict[str, Any]])
         return {"ok": True, "action": action_key, "relationshipId": relationship.get("relationshipId")}
 
     if action_key in ("confirm", "confirm_for_cut"):
-        if relationship.get("geometryType") != "edge_to_surface":
-            return {"ok": False, "action": action_key, "errors": ["Only edge_to_surface can be confirmed for cut."]}
-        if relationship.get("relationshipType") != "structural_butt_joint":
-            return {"ok": False, "action": action_key, "errors": ["Only structural_butt_joint can be confirmed for cut."]}
+        if not is_contact_hardware_pair(relationship):
+            return {
+                "ok": False,
+                "action": action_key,
+                "errors": [
+                    "Only contact hardware pairs can be confirmed for cut "
+                    "(edge_to_surface/structural_butt_joint or surface_to_surface/face_contact)."
+                ],
+            }
         roles = relationship.get("roles") or {}
         if not roles.get("hostPanelId") or not roles.get("targetPanelId"):
             return {"ok": False, "action": action_key, "errors": ["Missing host/target roles."]}

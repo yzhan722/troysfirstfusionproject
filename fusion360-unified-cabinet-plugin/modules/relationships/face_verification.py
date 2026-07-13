@@ -327,8 +327,6 @@ def verify_fixture_pair_offline(
 
 BATCH_VERIFY_ACTION = "relationships.verifyAllBboxCandidates"
 DEFAULT_BATCH_MAX_PAIRS = 200
-BATCH_GEOMETRY_TYPE = "edge_to_surface"
-BATCH_RELATIONSHIP_TYPE = "structural_butt_joint"
 
 
 def _relationship_panel_ids(relationship: Dict[str, Any]) -> Tuple[str, str]:
@@ -343,7 +341,9 @@ def _relationship_panel_ids(relationship: Dict[str, Any]) -> Tuple[str, str]:
 def filter_face_verifiable_candidates(
     relationships: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """Phase-1 batch filter: bbox_candidate + edge_to_surface + structural_butt_joint."""
+    """Phase-1 batch filter: bbox_candidate + contact hardware pairs."""
+    from connect_formal_ui import is_contact_hardware_pair
+
     accepted: List[Dict[str, Any]] = []
     for relationship in relationships or []:
         if not isinstance(relationship, dict):
@@ -352,9 +352,7 @@ def filter_face_verifiable_candidates(
         level = str(verification.get("level") or "bbox_candidate")
         if level != "bbox_candidate":
             continue
-        if str(relationship.get("geometryType") or "") != BATCH_GEOMETRY_TYPE:
-            continue
-        if str(relationship.get("relationshipType") or "") != BATCH_RELATIONSHIP_TYPE:
+        if not is_contact_hardware_pair(relationship):
             continue
         accepted.append(relationship)
     return accepted
@@ -386,7 +384,7 @@ def _reminder_lines(verified_count: int, skipped: List[Dict[str, Any]], *, cappe
     if capped:
         lines.append("已达本批上限，请缩小装配范围后重试。")
     if not verified_count and not skipped:
-        lines.append("没有可自动面验证的 bbox 候选（需边对面结构对接）。")
+        lines.append("没有可自动面验证的 bbox 候选（需接触类接头：边对面或面对面）。")
     return lines
 
 

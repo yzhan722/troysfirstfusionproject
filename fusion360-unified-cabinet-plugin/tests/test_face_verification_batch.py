@@ -30,19 +30,27 @@ class FaceVerificationBatchTests(unittest.TestCase):
         rels = [rel.to_dict() for rel in relationships]
         return panel_map, rels
 
-    def test_filter_keeps_edge_to_surface_structural_bbox_only(self):
+    def test_filter_keeps_contact_hardware_bbox_only(self):
+        from connect_formal_ui import is_contact_hardware_pair
+
         _panels, rels = self._fixture_scan()
         accepted = filter_face_verifiable_candidates(rels)
         self.assertGreater(len(accepted), 0)
         for rel in accepted:
-            self.assertEqual(rel["geometryType"], "edge_to_surface")
-            self.assertEqual(rel["relationshipType"], "structural_butt_joint")
+            self.assertTrue(is_contact_hardware_pair(rel), rel)
             self.assertEqual(rel["verification"]["level"], "bbox_candidate")
             self.assertFalse(rel["verification"]["safeForCut"])
-        # gap / surface pairs must not enter the batch pool
+        # gap / intersection must not enter the batch pool
         for rel in rels:
-            if rel["geometryType"] in ("gap_parallel", "surface_to_surface", "intersection"):
+            if rel["geometryType"] in ("gap_parallel", "intersection"):
                 self.assertNotIn(rel["relationshipId"], {item["relationshipId"] for item in accepted})
+        # surface_to_surface face_contact must be included when present
+        s2s = [rel for rel in rels if rel["geometryType"] == "surface_to_surface"]
+        if s2s:
+            accepted_ids = {item["relationshipId"] for item in accepted}
+            for rel in s2s:
+                if rel["relationshipType"] == "face_contact":
+                    self.assertIn(rel["relationshipId"], accepted_ids)
 
     def test_batch_verifies_fixture_edge_pairs(self):
         panel_map, rels = self._fixture_scan()

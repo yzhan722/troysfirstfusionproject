@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from screw_hole_from_relationship import (
-    ACCEPTED_GEOMETRY_TYPE,
-    ACCEPTED_RELATIONSHIP_TYPE,
+    UNSUPPORTED_CONTACT_PAIR_MESSAGE,
     _axis_size,
     _bounds_for_axes,
     _build_hole_positions,
@@ -15,6 +14,7 @@ from screw_hole_from_relationship import (
     assert_safe_for_preview,
     resolve_relationship_verification,
 )
+from connect_formal_ui import is_contact_hardware_pair
 
 HARDWARE_TYPE_HINGE_HOLE = "hinge_hole"
 HARDWARE_TYPE_LOCK_CUTOUT = "lock_cutout"
@@ -83,13 +83,13 @@ def _common_preview_context(
 
     geometry_type = str(relationship.get("geometryType") or "")
     relationship_type = str(relationship.get("relationshipType") or "")
-    if geometry_type != ACCEPTED_GEOMETRY_TYPE or relationship_type != ACCEPTED_RELATIONSHIP_TYPE:
+    if not is_contact_hardware_pair(relationship):
         return _error_report(
             hardware_type,
             action,
             "Relationship type not supported for {} preview.".format(hardware_type),
             errors=[
-                "Only edge_to_surface + structural_butt_joint is supported; got {} / {}.".format(
+                UNSUPPORTED_CONTACT_PAIR_MESSAGE.format(
                     geometry_type, relationship_type
                 )
             ],

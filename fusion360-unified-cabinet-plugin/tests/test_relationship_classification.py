@@ -61,6 +61,18 @@ class RelationshipClassificationTests(unittest.TestCase):
         rel = classify_pair(a, b)
         self.assertEqual(rel.geometryType, "surface_to_surface")
         self.assertEqual(rel.relationshipType, "face_contact")
+        # Equal contact-plane areas → lexicographically smaller panelId is host.
+        self.assertEqual(rel.roles.hostPanelId, "REL_SURFACE_A")
+        self.assertEqual(rel.roles.targetPanelId, "REL_SURFACE_B2")
+
+    def test_surface_to_surface_larger_face_is_host(self):
+        z = 12000.0
+        small = _panel("SMALL", BBoxMm(0, 100, 0, 100, z, z + 16), thickness_axis="Z", thickness_mm=16)
+        large = _panel("LARGE", BBoxMm(0, 200, 0, 200, z + 16, z + 32), thickness_axis="Z", thickness_mm=16)
+        rel = classify_pair(small, large)
+        self.assertEqual(rel.geometryType, "surface_to_surface")
+        self.assertEqual(rel.roles.hostPanelId, "LARGE")
+        self.assertEqual(rel.roles.targetPanelId, "SMALL")
 
     def test_gap_parallel_classification(self):
         z = 12000.0

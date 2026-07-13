@@ -7,11 +7,19 @@
 
 ## Product rules (locked)
 
-- [x] Candidate filter: `bbox_candidate` + `edge_to_surface` + `structural_butt_joint` only
+- [x] Candidate filter: `bbox_candidate` + contact hardware pairs
+  (`edge_to_surface`/`structural_butt_joint` or `surface_to_surface`/`face_contact`)
 - [x] Default `maxPairs = 200`; overflow → skip `cap_reached` + remind
 - [x] Failure → **skip** that pair + user reminders (do not abort batch)
 - [x] Never allow `bbox_candidate` to cut (gate unchanged)
 - [x] Verification upgrades are **session-only** (no attribute persistence in v1)
+
+## Follow-up (2026-07-11+)
+
+- [x] Persist `face_verified` into panel metadata `relationshipVerifications`
+- [x] Hydrate on `relationships.scan` / `scanSelected` / batch verify
+- [x] Single-pair face verify also persists to both bodies
+- [x] Does not overwrite `generator_declared` / `manual_confirmed`
 
 ---
 

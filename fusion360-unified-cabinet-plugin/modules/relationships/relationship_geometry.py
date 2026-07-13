@@ -51,6 +51,46 @@ def bbox_size(axis: str, bbox: BBoxMm) -> float:
     raise ValueError("Unknown axis: {}".format(axis))
 
 
+def _face_area_on_contact_plane(panel: PanelSnapshot, contact_axis: str) -> float:
+    """BBox face area in the plane orthogonal to the contact axis."""
+    sizes = {"X": float(panel.sizeX), "Y": float(panel.sizeY), "Z": float(panel.sizeZ)}
+    axes = [axis for axis in AXIS_NAMES if axis != contact_axis]
+    if len(axes) != 2:
+        return 0.0
+    return sizes[axes[0]] * sizes[axes[1]]
+
+
+def _assign_surface_to_surface_roles(
+    panel_a: PanelSnapshot,
+    panel_b: PanelSnapshot,
+    contact_axis: str,
+    roles: RelationshipRoles,
+    warnings: List[str],
+    audit_notes: List[str],
+) -> None:
+    """host = larger contact-plane face area; tie → smaller panelId."""
+    area_a = _face_area_on_contact_plane(panel_a, contact_axis)
+    area_b = _face_area_on_contact_plane(panel_b, contact_axis)
+    if abs(area_a - area_b) < 1e-6:
+        if panel_a.panelId <= panel_b.panelId:
+            host, target = panel_a, panel_b
+        else:
+            host, target = panel_b, panel_a
+    elif area_a >= area_b:
+        host, target = panel_a, panel_b
+    else:
+        host, target = panel_b, panel_a
+    roles.hostPanelId = host.panelId
+    roles.targetPanelId = target.panelId
+    warnings.append("host/target inferred by face-area rule (surface_to_surface)")
+    audit_notes.append(
+        "host/target inferred by face-area rule (surface_to_surface): host={} target={}.".format(
+            host.panelId,
+            target.panelId,
+        )
+    )
+
+
 def infer_thickness_axis(snapshot: PanelSnapshot) -> Tuple[str, Optional[float], List[str]]:
     warnings: List[str] = []
     sizes = {
@@ -296,6 +336,9 @@ def classify_pair(
                 relationship_type = "face_contact"
                 rule_id = "contact.both_thickness_on_axis"
                 audit_notes.append("Both panels expose thickness on contact axis.")
+                _assign_surface_to_surface_roles(
+                    panel_a, panel_b, contact_axis, roles, warnings, audit_notes
+                )
             elif a_is_edge ^ b_is_edge:
                 geometry_type = "edge_to_surface"
                 relationship_type = "structural_butt_joint"
@@ -317,6 +360,9 @@ def classify_pair(
                 relationship_type = "face_contact"
                 rule_id = "contact.face_without_clear_thickness"
                 warnings.append("Contact detected but thickness-axis edge rule was ambiguous.")
+                _assign_surface_to_surface_roles(
+                    panel_a, panel_b, contact_axis, roles, warnings, audit_notes
+                )
         else:
             gap_axis, overlaps, gaps = _detect_gap_parallel_axis(
                 panel_a,

@@ -62,14 +62,30 @@ class HardwareFromRelationshipTests(unittest.TestCase):
         self.assertGreater(len(feature["geometry"]["positions"]), 0)
         self.assertIn("audit", report)
 
-    def test_non_edge_to_surface_returns_error(self):
+    def test_non_contact_pair_returns_error(self):
         rel, snapshots = _fixture_edge_to_surface()
-        rel["geometryType"] = "surface_to_surface"
-        rel["relationshipType"] = "face_contact"
+        rel["geometryType"] = "gap_parallel"
+        rel["relationshipType"] = "unknown"
         report = preview_screw_holes_from_relationship(rel, panel_snapshots=snapshots)
         self.assertFalse(report["ok"])
         self.assertEqual(report["features"], [])
-        self.assertTrue(any("Only edge_to_surface" in err for err in report["errors"]))
+        self.assertTrue(any("contact hardware pairs" in err for err in report["errors"]))
+
+    def test_surface_to_surface_preview_ok_with_roles(self):
+        panels = {panel.panelId: panel for panel in build_fixture_snapshots()}
+        snapshots = {panel.panelId: panel.to_dict() for panel in panels.values()}
+        rel = None
+        for fixture in expected_fixture_cases():
+            if fixture["expectedGeometryType"] != "surface_to_surface":
+                continue
+            rel = classify_pair(panels[fixture["panelAId"]], panels[fixture["panelBId"]]).to_dict()
+            break
+        self.assertIsNotNone(rel)
+        self.assertEqual(rel["geometryType"], "surface_to_surface")
+        self.assertTrue((rel.get("roles") or {}).get("hostPanelId"))
+        report = preview_screw_holes_from_relationship(rel, panel_snapshots=snapshots)
+        self.assertTrue(report["ok"], report)
+        self.assertGreaterEqual(report["holeCount"], 1)
 
     def test_missing_host_target_returns_error(self):
         rel, snapshots = _fixture_edge_to_surface()
@@ -233,8 +249,8 @@ class HardwareFromRelationshipTests(unittest.TestCase):
 
     def test_cut_plan_unsupported_relationship_returns_error(self):
         rel, snapshots = _fixture_edge_to_surface()
-        rel["geometryType"] = "surface_to_surface"
-        rel["relationshipType"] = "face_contact"
+        rel["geometryType"] = "gap_parallel"
+        rel["relationshipType"] = "unknown"
         rel["verification"] = {
             "level": "cut_approved",
             "safeForPreview": True,
@@ -244,7 +260,26 @@ class HardwareFromRelationshipTests(unittest.TestCase):
         plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=snapshots)
         self.assertFalse(plan["ok"])
         self.assertEqual(plan["action"], CREATE_ACTION)
-        self.assertTrue(any("Only edge_to_surface" in err for err in plan["errors"]))
+        self.assertTrue(any("contact hardware pairs" in err for err in plan["errors"]))
+
+    def test_cut_plan_surface_to_surface_allowed_when_cut_safe(self):
+        panels = {panel.panelId: panel for panel in build_fixture_snapshots()}
+        snapshots = {panel.panelId: panel.to_dict() for panel in panels.values()}
+        rel = None
+        for fixture in expected_fixture_cases():
+            if fixture["expectedGeometryType"] != "surface_to_surface":
+                continue
+            rel = classify_pair(panels[fixture["panelAId"]], panels[fixture["panelBId"]]).to_dict()
+            break
+        self.assertIsNotNone(rel)
+        rel["verification"] = {
+            "level": "cut_approved",
+            "safeForPreview": True,
+            "safeForCut": True,
+            "requiresManualConfirmation": False,
+        }
+        plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=snapshots)
+        self.assertTrue(plan["ok"], plan)
 
     def test_cut_plan_missing_host_panel_id_returns_error(self):
         rel, snapshots = _fixture_edge_to_surface()

@@ -11,13 +11,19 @@ from hardware_models import (
     HardwareFeatureSource,
     HardwareFeatureValidation,
 )
+from connect_formal_ui import is_contact_hardware_pair
 
 RULE_ID = "screw_hole_from_edge_to_surface_v1"
 OPERATION_TYPE = "SCREW_HOLE_FROM_RELATIONSHIP"
 CREATE_ACTION = "hardware.createScrewHolesFromRelationship"
 PREVIEW_ACTION = "hardware.previewScrewHolesFromRelationship"
+# Legacy aliases (primary edge pair); planners use is_contact_hardware_pair.
 ACCEPTED_GEOMETRY_TYPE = "edge_to_surface"
 ACCEPTED_RELATIONSHIP_TYPE = "structural_butt_joint"
+UNSUPPORTED_CONTACT_PAIR_MESSAGE = (
+    "Only contact hardware pairs are supported "
+    "(edge_to_surface/structural_butt_joint or surface_to_surface/face_contact); got {} / {}."
+)
 CUT_BLOCKED_MESSAGE = (
     "Relationship is not cut-safe. Apply manual confirmation or face verification before cut."
 )
@@ -238,11 +244,11 @@ def preview_screw_holes_from_relationship(
 
     geometry_type = str(relationship.get("geometryType") or "")
     relationship_type = str(relationship.get("relationshipType") or "")
-    if geometry_type != ACCEPTED_GEOMETRY_TYPE or relationship_type != ACCEPTED_RELATIONSHIP_TYPE:
+    if not is_contact_hardware_pair(relationship):
         return _error_report(
             "Relationship type not supported for screw_hole preview.",
             errors=[
-                "Only edge_to_surface + structural_butt_joint is supported; got {} / {}.".format(
+                UNSUPPORTED_CONTACT_PAIR_MESSAGE.format(
                     geometry_type,
                     relationship_type,
                 )

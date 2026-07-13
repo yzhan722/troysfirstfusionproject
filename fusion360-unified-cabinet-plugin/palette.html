@@ -2297,13 +2297,14 @@
               </div>
               <div class="connect-detail-grid" id="connectHardwareParams" style="margin-bottom: 10px;"></div>
               <div class="hardware-section-note" id="connectVerifyHint" style="margin-bottom:8px;">
-                验证优先：生成器声明（检查后自动同步）→ 面验证 /「验证全部候选」→（调试）手动确认。≤1mm 近接触视为可切接触。批量结果仅本次会话有效。
+                验证优先：生成器声明（检查后自动同步）→ 面验证 /「验证全部候选」→（调试）手动确认。≤1mm 近接触视为可切接触。面验证通过后会写入板件元数据，重新扫描可恢复可切状态。
               </div>
               <div class="connect-actions">
                 <button type="button" class="ghost" id="connectPreviewBtn" disabled>预览</button>
                 <button type="button" class="ghost" id="connectReconcileBtn" disabled>同步声明</button>
                 <button type="button" class="ghost" id="connectFaceVerifyBtn" disabled>面验证</button>
                 <button type="button" class="primary" id="connectCutBtn" disabled>创建</button>
+                <button type="button" class="ghost" id="connectBatchCutBtn">批量创建五金</button>
               </div>
               <div class="connect-detail-grid" style="margin-top: 10px;">
                 <div class="connect-detail-item"><strong>预览摘要</strong><span id="connectPreviewHoleCount">-</span></div>
@@ -8753,6 +8754,8 @@
           } else if (action === "hardwareRelationshipCutResult") {
             hwRelDebugHandleCutResult(parsed);
             connectUiHandleCutResult(parsed);
+          } else if (action === "hardwareBatchCutResult") {
+            connectUiHandleBatchCutResult(parsed);
           } else if (action === "hardwareTypesResult") {
             connectUiHandleHardwareTypesResult(parsed);
           } else if (action === "connectDemoResult") {
@@ -11022,6 +11025,8 @@
       class_mismatch: "边/面类型不匹配",
       geometry_not_supported: "几何类型不支持",
       cap_reached: "超过本批上限",
+      cut_failed: "切削失败",
+      cut_exception: "切削异常",
     };
 
     const CONNECT_HW_RULES = {
@@ -11647,7 +11652,7 @@
     }
 
     function connectUiVerifyAllBboxCandidates() {
-      connectUiSetMessage("正在批量面验证 bbox 候选（边对面结构对接）…");
+      connectUiSetMessage("正在批量面验证 bbox 候选（接触类接头）…");
       connectUiSetOperation("批量面验证计算中…", "warn");
       fusionSend("relationships.verifyAllBboxCandidates", { toleranceMm: 1.0, maxPairs: 200 });
     }
@@ -11677,6 +11682,42 @@
         return;
       }
       fusionSend("relationships.connectExecute", { action: "cut", relationship });
+    }
+
+    function connectUiBatchCutHardware() {
+      const rule = connectUiActiveHardwareRule();
+      const meta = connectUiHardwareMeta(rule?.type || connectUiSelectedHardwareType());
+      if (!meta.cutReady) {
+        connectUiSetMessage(`${meta.label} 仅预览，不可批量切削。`, "error");
+        return;
+      }
+      connectUiSetMessage(`正在对所有已验证接头批量创建 ${meta.label}…`);
+      connectUiSetOperation("批量创建五金计算中…", "warn");
+      fusionSend("hardware.createHardwareForCutSafeRelationships", {
+        rule,
+        maxPairs: 50,
+      });
+    }
+
+    function connectUiHandleBatchCutResult(parsed) {
+      connectUiRenderBatchSkipList(parsed?.skipped || []);
+      if (!parsed?.ok) {
+        const err = (parsed?.errors || ["批量创建五金失败"]).join(" ");
+        connectUiSetOperation(err, "error");
+        connectUiSetMessage(err, "error");
+        return;
+      }
+      const reminders = (parsed?.reminders || []).filter(Boolean);
+      const summary = `批量创建：成功 ${parsed.createdCount || 0} · 跳过 ${parsed.skippedCount || 0}`
+        + (parsed.hardwareType ? ` · ${parsed.hardwareType}` : "");
+      const tone = (parsed.skippedCount || 0) > 0 ? "warn" : "ok";
+      connectUiSetOperation(summary, tone);
+      connectUiSetMessage(reminders.length ? reminders.join(" ") : summary, tone);
+      const first = (parsed?.created || [])[0];
+      if (first?.cutFeatureName) {
+        connectUiEl("connectCutFeature") && (connectUiEl("connectCutFeature").textContent = first.cutFeatureName);
+        connectUiEl("connectCutHoleCount") && (connectUiEl("connectCutHoleCount").textContent = String(parsed.createdCount || 0));
+      }
     }
 
     function connectUiHandleInspectResult(parsed) {
@@ -11828,7 +11869,8 @@
       }
 
       const reminders = (parsed?.reminders || []).filter(Boolean);
-      const summary = `批量面验证：通过 ${parsed.verifiedCount || 0} · 跳过 ${parsed.skippedCount || 0}（本次会话有效）`;
+      const summary = `批量面验证：通过 ${parsed.verifiedCount || 0} · 跳过 ${parsed.skippedCount || 0}`
+        + (parsed.verificationPersistedCount != null ? ` · 已落盘 ${parsed.verificationPersistedCount}` : "");
       const tone = (parsed.skippedCount || 0) > 0 ? "warn" : "ok";
       connectUiSetOperation(summary, tone);
       connectUiSetMessage(reminders.length ? reminders.join(" ") : summary, tone);
@@ -11988,6 +12030,7 @@
       connectUiEl("connectFaceVerifyBtn")?.addEventListener("click", connectUiFaceVerify);
       connectUiEl("connectPreviewBtn")?.addEventListener("click", connectUiPreview);
       connectUiEl("connectCutBtn")?.addEventListener("click", connectUiCut);
+      connectUiEl("connectBatchCutBtn")?.addEventListener("click", connectUiBatchCutHardware);
       connectUiEl("connectHardwareType")?.addEventListener("change", connectUiRefreshHardwareTypeUi);
       connectUiRefreshHardwareTypeUi();
       fusionSend("hardware.listHardwareTypes", {});

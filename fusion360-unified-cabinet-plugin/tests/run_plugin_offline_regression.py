@@ -80,6 +80,7 @@ def main() -> int:
         "run_real_cabinet_hardware_offline.py",
         "run_generic_hardware_route_offline.py",
         "run_verify_all_offline.py",
+        "run_batch_hardware_cut_offline.py",
     ):
         code = run(
             [sys.executable, str(ROOT / "tests" / smoke_script)],
@@ -107,6 +108,7 @@ def main() -> int:
             "tests.test_contact_patch",
             "tests.test_face_verification",
             "tests.test_face_verification_batch",
+            "tests.test_relationship_verification_store",
             "tests.test_panel_metadata_writeback",
             "tests.test_relationship_visual_overlay",
             "tests.test_relationship_overlay_selfcheck",
