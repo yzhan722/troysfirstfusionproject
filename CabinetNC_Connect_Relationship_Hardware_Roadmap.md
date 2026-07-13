@@ -153,8 +153,9 @@ Auto hardware type (2026-07-13):
   📄 docs/connect-auto-hardware-checklist.md
 
 One-click pipeline (2026-07-13):
-  ✅ hardware.runConnectPipeline = 3a verify-all → 3c batch cut
-  ✅ passes gapJoints / autoHardware / rule; cut uses verifiedRelationships
+  ✅ hardware.runConnectPipeline = declare → 3a verify-all → 3c batch cut
+  ✅ same pair prefers generator_declared; declare-alone survives verify fail
+  ✅ passes gapJoints / autoHardware / rule
   ✅ Connect「一键验证并创建五金」
   ✅ offline: run_connect_pipeline_offline.py
   📄 docs/connect-one-click-pipeline-checklist.md

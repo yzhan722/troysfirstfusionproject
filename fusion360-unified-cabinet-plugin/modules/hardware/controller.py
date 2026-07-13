@@ -648,9 +648,14 @@ class HardwareController:
             }
 
     def run_connect_pipeline(self, payload, palette):
-        """One-click: batch face-verify (3a) then batch hardware cut (3c)."""
+        """One-click: reconcile declarations → face-verify rest → batch cut."""
         try:
-            from connect_pipeline import PIPELINE_ACTION, build_pipeline_report
+            from batch_hardware_from_relationships import filter_cut_safe_hardware_candidates
+            from connect_pipeline import (
+                PIPELINE_ACTION,
+                build_pipeline_report,
+                merge_pipeline_cut_candidates,
+            )
             from modules.relationships.controller import RelationshipController
 
             if not isinstance(payload, dict):
@@ -661,32 +666,80 @@ class HardwareController:
                 }
 
             rel_ctrl = RelationshipController(self.fusion)
+            gap_joints = payload.get("gapJoints")
+            tolerance_mm = payload.get("toleranceMm", 1.0)
 
+            # 1) Generator declarations first (soft — empty is fine).
+            declare_payload = {
+                "toleranceMm": tolerance_mm,
+                "generator": payload.get("generator"),
+                "runLabel": payload.get("runLabel") or payload.get("preferredRunToken"),
+                "assemblyComponentName": payload.get("assemblyComponentName"),
+                "bboxSource": payload.get("declareBboxSource") or payload.get("bboxSource") or "design_preferred",
+            }
+            _dev, declare_report = rel_ctrl.reconcile_generator_declarations(declare_payload, palette)
+            if not isinstance(declare_report, dict):
+                declare_report = {
+                    "ok": False,
+                    "declaredRelationships": [],
+                    "errors": ["Declare stage returned no report."],
+                }
+
+            no_panels = any(
+                "No panel bodies" in str(err)
+                for err in (declare_report.get("errors") or [])
+            )
+            if no_panels:
+                report = build_pipeline_report(
+                    declare_report={**declare_report, "cutSafeCount": 0},
+                    verify_report=None,
+                    cut_report=None,
+                    auto_hardware=payload.get("autoHardware"),
+                )
+                return "hardwarePipelineResult", report
+
+            declared_cut_safe = filter_cut_safe_hardware_candidates(
+                list(declare_report.get("declaredRelationships") or []),
+                gap_settings=gap_joints,
+            )
+            declare_report = dict(declare_report)
+            declare_report["cutSafeCount"] = len(declared_cut_safe)
+            declare_report["cutSafeRelationships"] = declared_cut_safe
+
+            # 2) Face-verify bbox candidates (fills joints generators did not declare).
             verify_payload = {
-                "toleranceMm": payload.get("toleranceMm", 1.0),
+                "toleranceMm": tolerance_mm,
                 "maxPairs": payload.get("verifyMaxPairs", payload.get("maxPairs", 200)),
-                "gapJoints": payload.get("gapJoints"),
+                "gapJoints": gap_joints,
                 "bboxSource": payload.get("bboxSource") or "physical",
             }
             _ev, verify_report = rel_ctrl.verify_all_bbox_candidates(verify_payload, palette)
             if not isinstance(verify_report, dict):
                 verify_report = {"ok": False, "errors": ["Verify stage returned no report."]}
 
-            cut_report = None
+            face_verified = []
             if verify_report.get("ok"):
+                face_verified = list(verify_report.get("verifiedRelationships") or [])
+
+            merged = merge_pipeline_cut_candidates(declared_cut_safe, face_verified)
+
+            # 3) Cut when we have declarations and/or a successful verify stage.
+            cut_report = None
+            can_cut = bool(declared_cut_safe) or bool(verify_report.get("ok"))
+            if can_cut:
                 cut_payload = {
                     "rule": payload.get("rule") if isinstance(payload.get("rule"), dict) else {"type": "screw_hole"},
                     "maxPairs": payload.get("cutMaxPairs", payload.get("maxPairs", 50)),
-                    "gapJoints": payload.get("gapJoints"),
+                    "gapJoints": gap_joints,
                     "autoHardware": payload.get("autoHardware"),
+                    "relationships": merged,
                 }
-                # Use 3a verified list directly (even if empty) — avoid rescan race.
-                cut_payload["relationships"] = list(verify_report.get("verifiedRelationships") or [])
                 _cev, cut_report = self.create_hardware_for_cut_safe_relationships(cut_payload, palette)
                 if not isinstance(cut_report, dict):
                     cut_report = {"ok": False, "errors": ["Cut stage returned no report."]}
 
             report = build_pipeline_report(
+                declare_report=declare_report,
                 verify_report=verify_report,
                 cut_report=cut_report,
                 auto_hardware=payload.get("autoHardware"),

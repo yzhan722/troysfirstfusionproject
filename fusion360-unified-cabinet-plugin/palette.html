@@ -2479,7 +2479,7 @@
               </div>
               <div class="connect-detail-grid" id="connectHardwareParams" style="margin-bottom: 10px;"></div>
               <div class="hardware-section-note" id="connectVerifyHint" style="margin-bottom:8px;">
-                验证优先：生成器声明（检查后自动同步）→ 面验证 /「验证全部候选」/「一键验证并创建五金」→（调试）手动确认。≤1mm 近接触视为可切接触。面验证通过后会写入板件元数据，重新扫描可恢复可切状态。
+                验证优先：生成器声明（检查后自动同步）→ 面验证 /「验证全部候选」。一键流水线 = 声明 → 面验证 → 批量五金。≤1mm 近接触视为可切接触。面验证通过后会写入板件元数据，重新扫描可恢复可切状态。
               </div>
               <div class="connect-actions">
                 <button type="button" class="ghost" id="connectPreviewBtn" disabled>预览</button>
@@ -14797,8 +14797,8 @@
       const label = autoHardware.enabled ? "自动选型" : meta.label;
       connectUiSetMessage(
         gapJoints.enabled
-          ? `一键流水线：面验证（接触+缝隙）→ 批量创建 ${label}…`
-          : `一键流水线：面验证 → 批量创建 ${label}…`
+          ? `一键流水线：生成器声明 → 面验证（接触+缝隙）→ 批量创建 ${label}…`
+          : `一键流水线：生成器声明 → 面验证 → 批量创建 ${label}…`
       );
       connectUiSetOperation("一键流水线计算中…", "warn");
       fusionSend("hardware.runConnectPipeline", {
@@ -14844,6 +14844,7 @@
         connectUiSetMessage(err, "error");
         return;
       }
+      const declare = parsed?.declare || {};
       const verify = parsed?.verify || {};
       const cut = parsed?.cut || {};
       const typeCounts = cut?.hardwareTypeCounts || {};
@@ -14851,12 +14852,17 @@
         ? ` · ${Object.entries(typeCounts).map(([k, v]) => `${k}:${v}`).join(", ")}`
         : (cut.hardwareType ? ` · ${cut.hardwareType}` : "");
       const summary =
-        `流水线：验证通过 ${verify.verifiedCount || 0} · 验证跳过 ${verify.skippedCount || 0}`
+        `流水线：声明可切 ${declare.cutSafeCount || 0}`
+        + ` · 验证通过 ${verify.verifiedCount || 0} · 验证跳过 ${verify.skippedCount || 0}`
         + ` · 创建 ${cut.createdCount || 0} · 切削跳过 ${cut.skippedCount || 0}${typeSummary}`;
       const reminders = (parsed?.reminders || []).filter(Boolean);
-      const tone = ((verify.skippedCount || 0) + (cut.skippedCount || 0)) > 0 ? "warn" : "ok";
+      const warnings = (parsed?.warnings || []).filter(Boolean);
+      const tone = (
+        ((verify.skippedCount || 0) + (cut.skippedCount || 0)) > 0 || warnings.length
+      ) ? "warn" : "ok";
       connectUiSetOperation(summary, tone);
-      connectUiSetMessage(reminders.length ? reminders.join(" ") : summary, tone);
+      const messageBits = reminders.concat(warnings);
+      connectUiSetMessage(messageBits.length ? messageBits.join(" ") : summary, tone);
       const first = (parsed?.created || [])[0];
       if (first?.cutFeatureName) {
         connectUiEl("connectCutFeature") && (connectUiEl("connectCutFeature").textContent = first.cutFeatureName);
