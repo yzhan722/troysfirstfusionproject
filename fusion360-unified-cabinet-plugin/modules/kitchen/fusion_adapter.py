@@ -410,6 +410,9 @@ def _new_assembly_component(root_comp, run_label, component_name=None, origin_x_
     try:
         component.attributes.add(ATTRIBUTE_GROUP, "module", "kitchen")
         component.attributes.add(ATTRIBUTE_GROUP, "assemblyName", component_name)
+        # Connect collect also looks up UnifiedCabinetPlugin.assemblyName.
+        component.attributes.add("UnifiedCabinetPlugin", "module", "kitchen")
+        component.attributes.add("UnifiedCabinetPlugin", "assemblyName", component_name)
     except Exception:
         pass
     return component, component_name, None

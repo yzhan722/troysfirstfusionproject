@@ -12,7 +12,7 @@ for path in (HW_DIR, REL_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from generator_bridge_runner import load_params_fixture, run_general_tall, run_kitchen, run_overhead  # noqa: E402
+from generator_bridge_runner import load_params_fixture, run_general_tall, run_kitchen, run_lounge, run_overhead  # noqa: E402
 from generator_declared_service import reconcile_generator_declarations  # noqa: E402
 from generator_panel_adapter import snapshots_from_generator_result  # noqa: E402
 from general_tall_declared_relationships import (  # noqa: E402
@@ -20,6 +20,9 @@ from general_tall_declared_relationships import (  # noqa: E402
 )
 from kitchen_declared_relationships import (  # noqa: E402
     list_kitchen_declarations_for_panel_ids,
+)
+from lounge_declared_relationships import (  # noqa: E402
+    list_lounge_declarations_for_panel_ids,
 )
 from overhead_declared_relationships import extract_board_suffix, list_overhead_declarations_for_panel_ids  # noqa: E402
 from relationship_service import build_panel_snapshot_from_dict, dedupe_panel_snapshots  # noqa: E402
@@ -296,6 +299,65 @@ class GeneratorDeclaredRelationshipTests(unittest.TestCase):
             item["relationship"]
             for item in report.get("reconciled") or []
             if item.get("declarationId") == "kt_b1_b3_bottom_rail_to_deck"
+        )
+        panel_map = {snap.panelId: snap.to_dict() for snap in snapshots}
+        host_id = rel["roles"]["hostPanelId"]
+        target_id = rel["roles"]["targetPanelId"]
+        panel_snapshots = {host_id: panel_map[host_id], target_id: panel_map[target_id]}
+        self.assertIsNone(validate_relationship_for_cut(rel))
+        preview = preview_screw_holes_from_relationship(rel, panel_snapshots=panel_snapshots)
+        self.assertTrue(preview.get("ok"), preview)
+        plan = plan_screw_hole_cut_from_relationship(rel, panel_snapshots=panel_snapshots)
+        self.assertTrue(plan.get("ok"), plan)
+
+    def _lounge_snapshots(self):
+        bridge = run_lounge(load_params_fixture("lounge_l_shape.json"))
+        return [
+            build_panel_snapshot_from_dict(item)
+            for item in snapshots_from_generator_result("lounge", bridge)
+        ]
+
+    def test_lounge_bridge_emits_relationship_declarations(self):
+        bridge = run_lounge(load_params_fixture("lounge_l_shape.json"))
+        declarations = bridge.get("relationshipDeclarations") or []
+        self.assertGreaterEqual(len(declarations), 3)
+        ids = {item.get("declarationId") for item in declarations}
+        self.assertIn("lg_main_front_to_top", ids)
+        self.assertIn("lg_l_front_to_side", ids)
+        self.assertIn("lg_l_front_to_top", ids)
+
+    def test_lounge_declarations_match_skeleton_panels(self):
+        snapshots = self._lounge_snapshots()
+        panel_ids = {snap.panelId for snap in snapshots}
+        declarations = list_lounge_declarations_for_panel_ids(panel_ids)
+        self.assertGreaterEqual(len(declarations), 3)
+        ids = {item["declarationId"] for item in declarations}
+        self.assertIn("lg_main_front_to_top", ids)
+
+    def test_reconcile_lounge_declarations(self):
+        snapshots = self._lounge_snapshots()
+        report = reconcile_generator_declarations(snapshots, generator="lounge")
+        self.assertTrue(report.get("ok"), report.get("errors"))
+        self.assertGreaterEqual(report.get("declarationCount", 0), 3)
+        self.assertGreaterEqual(report.get("geometryOkCount", 0), 3)
+        relationships = report.get("declaredRelationships") or []
+        front_top = next(
+            rel
+            for rel in relationships
+            if extract_board_suffix(rel["panelA"]["panelId"]) == "main_front"
+            and extract_board_suffix(rel["panelB"]["panelId"]) == "main_top"
+        )
+        self.assertEqual(front_top["verification"]["level"], "generator_declared")
+        self.assertTrue(front_top["geometryValidation"]["ok"])
+        self.assertTrue(front_top["verification"]["safeForCut"])
+
+    def test_declared_lg_main_front_to_top_supports_preview_and_cut_plan(self):
+        snapshots = self._lounge_snapshots()
+        report = reconcile_generator_declarations(snapshots, generator="lounge")
+        rel = next(
+            item["relationship"]
+            for item in report.get("reconciled") or []
+            if item.get("declarationId") == "lg_main_front_to_top"
         )
         panel_map = {snap.panelId: snap.to_dict() for snap in snapshots}
         host_id = rel["roles"]["hostPanelId"]

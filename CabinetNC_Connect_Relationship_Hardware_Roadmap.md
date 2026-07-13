@@ -904,7 +904,9 @@ Optional follow-up (not blocking M6):
   ✅ BRep face bounds v1.1 — per-face edge-sample AABB (2026-07-11)
   ✅ General Tall generator_declared offline (2026-07-11; 4 rail→deck joints)
   ✅ Kitchen generator_declared offline (2026-07-11; B1/B2→B3)
-  ❌ Lounge / Fridge generator_declared
+  ✅ Lounge generator_declared offline (2026-07-13; L_SHAPE front→top/side)
+  ✅ Fusion Play `--batch declared` (2026-07-13; Kitchen/GT/Lounge create→reconcile→preview)
+  ❌ standalone Fridge generator_declared (optional; fridge in GT)
 ```
 
 ## Goal
@@ -1037,7 +1039,9 @@ Completed:
 
 Next extension (not blocking M7):
   ✅ General Tall offline (2026-07-11) — B1/B2/T1/T2 → B3/T3 rail-to-deck
-  ❌ Kitchen / Lounge / Fridge generators
+  ✅ Kitchen offline + Fusion declared smoke (2026-07-13)
+  ✅ Lounge offline + Fusion declared smoke (2026-07-13)
+  ❌ standalone Fridge generator_declared (optional; fridge in GT)
 ```
 
 
@@ -1327,14 +1331,16 @@ Post-M9 scaffold hardware lane is complete.
 - **Connect UI hardware params** are editable per type.
 - **General Tall `generator_declared`:** offline sealed 2026-07-11 (4 rail→deck joints; bridge emit + reconcile + cut plan).
 - **Kitchen `generator_declared`:** offline sealed 2026-07-11 (2 bottom rail→deck joints).
+- **Lounge `generator_declared`:** offline sealed 2026-07-13 (3 L_SHAPE front→top/side joints).
+- **Fusion Play `--batch declared`:** sealed 2026-07-13 (Kitchen/GT/Lounge create→reconcile→preview screw; smoke removed after PASS).
 - **BRep face bounds v1.1:** Fusion faces use per-face edge-sample AABB (clamped to panel), not full panel bbox.
 - **Real-cabinet hardware offline:** all 5 types preview+cut-plan on Overhead BP↔D0 declared joint.
-- Remaining truth gaps: Lounge/Fridge `generator_declared`; NC consumers of writeback (none yet).
+- Remaining truth gaps: standalone Fridge `generator_declared` (optional; fridge capabilities live in GT); NC consumers of writeback (none yet).
 
 Next options:
-1. Lounge / Fridge `generator_declared` (optional)
-2. Fusion Play smokes for Kitchen/GT declared on live assemblies
-3. Further face-bounds refinements (parametric loops)
+1. Further face-bounds refinements (parametric loops) — M5 ceiling still deferred
+2. NC consumers of panel writeback (none yet)
+3. Standalone Fridge `generator_declared` (optional; skip unless product needs Fridge module alone)
 
 Checklist: `docs/connect-batch-c-checklist.md` · `docs/connect-post-m9-hardware-type-ui-checklist.md` · `docs/connect-post-m9-scaffold-hardware-checklist.md` · `docs/connect-real-cabinet-hardware-checklist.md` · `docs/connect-m5-face-verification-checklist.md`
 

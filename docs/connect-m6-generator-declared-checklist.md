@@ -1,7 +1,7 @@
 # M6 Generator-Declared Relationships Checklist
 
 **Milestone:** M6 — Generator-Declared Relationships  
-**Status:** ✅ **SEALED** (Overhead v1 — 2026-07-05; General Tall + Kitchen extensions offline — 2026-07-11)
+**Status:** ✅ **SEALED** (Overhead v1 — 2026-07-05; GT + Kitchen offline — 2026-07-11; Lounge + Fusion Kitchen/GT/Lounge declared smoke — 2026-07-13)
 
 ---
 
@@ -45,6 +45,19 @@ Not declared (by design): top strip-to-deck (intersection on kitchen_base); B1�
 
 ---
 
+## Extension: Lounge (2026-07-13)
+
+Offline + Fusion declared smoke sealed:
+
+- L_SHAPE declares 3 joints: main_front→main_top, l_front→l_side, l_front→l_top
+- Emit: `modules/loungeGenerator/relationshipDeclarations.ts`
+- Catalog: `modules/relationships/lounge_declared_relationships.py`
+- Service dispatch: `generator_declared_service.py`
+- Fusion: lounge assembly writes `relationshipDeclarations`; smoke `--batch declared`
+- Offline: `tests/run_declared_generators_offline.py` + lounge unit tests
+
+---
+
 ## Runners
 
 > **Note (2026-07-05):** One-click smoke scripts (`connect_pipeline_smoke`, `contact_patch_smoke`) removed. M6 seal used historical Fusion smoke JSON; ongoing verification uses offline regression + manual Fusion reconcile flow.
@@ -52,9 +65,11 @@ Not declared (by design): top strip-to-deck (intersection on kitchen_base); B1�
 | Script / surface | Environment |
 |------------------|-------------|
 | `tests/run_plugin_offline_regression.py` | Terminal — full offline regression |
+| `tests/run_declared_generators_offline.py` | Kitchen / GT / Lounge emit→reconcile→preview |
 | `tests/run_generator_relationship_regression.py` | Generator declared-relationship matrix |
 | `tests/run_connect_demo_pack_offline.py` | Connect demo pack (includes Overhead structural joint) |
-| **CabinetNC palette → Debug** | Fusion — generate Overhead/GT → Reconcile Declarations → cut |
+| `python scripts/manage_fusion_smokes.py install --batch declared` | Fusion — temporary Play smoke (remove after PASS) |
+| **CabinetNC palette → Debug** | Fusion — generate → Reconcile Declarations → cut |
 
 ```powershell
 cd fusion360-unified-cabinet-plugin

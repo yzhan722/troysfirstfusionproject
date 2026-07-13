@@ -133,12 +133,18 @@ def is_panel_body(body) -> bool:
         return True
     if _attr_value(body, LEGACY_ATTRIBUTE_GROUP, "boardId"):
         return True
+    if _attr_value(body, CABINETNC_ATTRIBUTE_GROUP, "boardId"):
+        return True
     if _attr_value(body, LEGACY_ATTRIBUTE_GROUP, "relationshipFixture"):
         return True
     component = _parent_component(body)
     if component and _attr_value(component, PANEL_ATTRIBUTE_GROUP, PANEL_ID_ATTR):
         return True
     if component and _attr_value(component, PANEL_ATTRIBUTE_GROUP, PANEL_METADATA_ATTR):
+        return True
+    if component and _attr_value(component, CABINETNC_ATTRIBUTE_GROUP, "boardId"):
+        return True
+    if component and _attr_value(component, CABINETNC_ATTRIBUTE_GROUP, "panelId"):
         return True
     return False
 
@@ -255,11 +261,20 @@ def find_component_by_name(component, name: str):
         pass
     if _attr_value(component, LEGACY_ATTRIBUTE_GROUP, "assemblyName") == name:
         return component
+    # Kitchen (and some adapters) store assemblyName under CabinetNC.
+    if _attr_value(component, CABINETNC_ATTRIBUTE_GROUP, "assemblyName") == name:
+        return component
     try:
         occurrences = component.occurrences
         count = occurrences.count if occurrences else 0
         for index in range(count):
-            child = occurrences.item(index).component
+            occurrence = occurrences.item(index)
+            try:
+                if str(getattr(occurrence, "name", "") or "") == name:
+                    return occurrence.component
+            except Exception:
+                pass
+            child = occurrence.component
             found = find_component_by_name(child, name)
             if found:
                 return found

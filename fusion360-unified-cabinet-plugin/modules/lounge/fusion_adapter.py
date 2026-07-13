@@ -1,5 +1,6 @@
 import time
 import math
+import json
 
 import adsk.core
 import adsk.fusion
@@ -1064,6 +1065,17 @@ def create_lounge_assembly_bodies(fusion_adapter, result, run_label=None, compon
     summary["assemblyComponentName"] = component_name
     if component_warning:
         summary["warnings"].append(component_warning)
+    declarations = result.get("relationshipDeclarations") if isinstance(result, dict) else None
+    if isinstance(declarations, list) and declarations and component is not root:
+        try:
+            component.attributes.add(
+                ATTRIBUTE_GROUP,
+                "relationshipDeclarations",
+                json.dumps(declarations, ensure_ascii=False, separators=(",", ":")),
+            )
+            summary["relationshipDeclarationCount"] = len(declarations)
+        except Exception as ex:
+            summary["warnings"].append("Could not write relationshipDeclarations on assembly: {}".format(ex))
     panels = result.get("panels") if isinstance(result.get("panels"), list) else []
     lids = result.get("lids") if isinstance(result.get("lids"), list) else []
     items = sorted(
