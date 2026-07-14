@@ -377,6 +377,57 @@ function testFridgeStackVProfilesCutReady() {
   assert.ok(Math.abs(Math.max(...zs) - height) < 0.5, "V5 profile height");
 }
 
+function testClassicFridgeStackUserEffects() {
+  // User-facing classic: drawer under fridge, flap above, exterior right, avoidance on.
+  const result = generateGeneralTallCabinet({
+    ...fridgeParams([
+      zone("drawer", "drawer", 250),
+      zone("fridge", "fridge", 1500, {
+        applianceWidthMm: 550,
+        applianceDepthMm: 580,
+        applianceHeightMm: 1500,
+      }),
+      zone("flap", "top_flap", 195),
+    ]),
+    exteriorSide: "right",
+    syncCabinetWidthFromFridge: true,
+    avoidance: { enabled: true, depth: 300, height: 200 },
+    frontHardware: {
+      frontPanelsEnabled: true,
+      frontClearance: 2.5,
+      locksEnabled: true,
+      lockPresetId: "razor_long_rounded_1",
+    },
+  });
+
+  assert.deepEqual(result.validation.errors, []);
+  const ids = new Set(result.boards.map((b) => b.id));
+  assert(ids.has("V5"), "V5 required for fridge cavity");
+  assert(ids.has("SidePanel_R"), "exterior right → SidePanel_R");
+  assert(!ids.has("SidePanel_L"), "should not force left side panel");
+
+  assert.equal(
+    result.frontPanels.filter((p) => p.zoneId === "fridge").length,
+    0,
+    "fridge cavity stays open",
+  );
+  assert.ok(
+    result.frontPanels.some((p) => p.zoneId === "drawer"),
+    "drawer gets a front panel",
+  );
+  assert.ok(
+    result.frontPanels.some((p) => p.zoneId === "flap"),
+    "flap gets a front panel",
+  );
+
+  const mode = result.debug.fridgeAvoidance?.finalMode;
+  assert.ok(mode === "normal" || mode === "raised", `expected fridge avoidance mode, got ${mode}`);
+
+  const decls = new Set((result.relationshipDeclarations || []).map((d) => d.declarationId));
+  assert(decls.has("gt_v5_v1"), "V5 opposite right exterior mates V1");
+  assert(decls.has("gt_sidepanel_r_v2"), "SidePanel_R Connect decl");
+}
+
 const tests = [
   testFridgeBoundaryRules,
   testFridgeZoneUsesApplianceHeightAndStaysOpen,
@@ -389,6 +440,7 @@ const tests = [
   testFridgeNormalAvoidanceWhenGapAtLeast105,
   testFridgeStackEmitsConnectDeclarations,
   testFridgeStackVProfilesCutReady,
+  testClassicFridgeStackUserEffects,
 ];
 
 for (const test of tests) {

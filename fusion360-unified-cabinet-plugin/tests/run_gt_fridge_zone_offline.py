@@ -87,11 +87,14 @@ def main() -> int:
         "applianceWidthMm",
         "exteriorSide",
         "generalTallApplyFridgeExteriorToForm",
+        "SHOW_FRIDGE_MODULE",
+        "applyGeneralTallFridgeLayout",
+        "gtLoadFridgeLayoutBtn",
         '"fridge"',
     ):
         if token not in palette:
             return _fail("palette missing", token)
-    print("[PASS] palette GT fridge controls")
+    print("[PASS] palette GT fridge controls + Fridge UI hide")
 
     test = subprocess.run(
         ["node", "--experimental-strip-types", "fridgeZone.test.ts"],

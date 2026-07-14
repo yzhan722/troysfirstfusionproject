@@ -85,6 +85,7 @@ def main() -> int:
         "run_connect_hardware_operations_offline.py",
         "run_connect_operations_palette_offline.py",
         "run_gt_fridge_zone_offline.py",
+        "run_gt_fridge_user_parity_offline.py",
         "run_declared_generators_offline.py",
     ):
         code = run(

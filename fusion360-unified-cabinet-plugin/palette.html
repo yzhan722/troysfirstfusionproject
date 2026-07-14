@@ -1542,8 +1542,9 @@
 
   <div class="shell page" id="page-design">
     <aside class="module-nav">
-      <div class="module active" data-module="fridge">Fridge Cabinet</div>
-      <div class="module" data-module="generalTall">General Tall Cabinet</div>
+      <!-- ponytail: Fridge UI hidden; GT fridge zone is the user path. Flip SHOW_FRIDGE_MODULE in script to restore. -->
+      <div class="module" data-module="fridge" id="fridgeModuleNav" hidden>Fridge Cabinet</div>
+      <div class="module active" data-module="generalTall">General Tall Cabinet</div>
       <div class="module" data-module="overhead">Overhead Cabinet</div>
       <div class="module" data-module="kitchen">Kitchen Cabinet</div>
       <div class="module" data-module="lounge">Lounge Generator</div>
@@ -1551,7 +1552,7 @@
     </aside>
 
     <aside class="params">
-      <div class="module-panel" id="fridgeParamsPanel" data-module-panel="fridge">
+      <div class="module-panel" id="fridgeParamsPanel" data-module-panel="fridge" hidden>
       <div class="card">
         <h3>Cabinet Parameters</h3>
         <div class="card-body">
@@ -1631,10 +1632,11 @@
       </div>
 
       </div>
-      <div class="module-panel" id="generalTallParamsPanel" data-module-panel="generalTall" hidden>
+      <div class="module-panel" id="generalTallParamsPanel" data-module-panel="generalTall">
         <div class="card">
           <h3>General Tall Cabinet</h3>
           <div class="card-body">
+            <div class="message" style="margin-bottom:8px;">Fridge cabinets: use zone type <strong>fridge</strong>, or click <strong>Load fridge layout</strong> in the workspace. (Standalone Fridge module is hidden.)</div>
             <div class="grid2">
               <label>Cabinet Height / CH <input id="gtCabinetHeight" type="number" value="2000"></label>
               <label>Cabinet Width / CW <input id="gtCabinetWidth" type="number" value="600"></label>
@@ -1858,7 +1860,7 @@
     </aside>
 
     <main class="workspace">
-      <div class="module-panel" id="fridgeWorkspacePanel" data-module-panel="fridge">
+      <div class="module-panel" id="fridgeWorkspacePanel" data-module-panel="fridge" hidden>
       <div class="actions">
         <button class="ghost" id="calculateBtn">Calculate</button>
         <button class="ghost" id="validateBtn">Validate</button>
@@ -1902,10 +1904,11 @@
       </div>
       </div>
 
-      <div class="module-panel" id="generalTallWorkspacePanel" data-module-panel="generalTall" hidden>
+      <div class="module-panel" id="generalTallWorkspacePanel" data-module-panel="generalTall">
         <div class="actions">
           <button class="primary" id="gtGenerateBtn">Generate General Tall Data</button>
           <button class="ghost" id="gtCreateFusionBodiesBtn" disabled>Create Fusion Rough Bodies</button>
+          <button class="ghost" id="gtLoadFridgeLayoutBtn" title="Drawer + fridge cavity + top flap with exterior/avoidance">Load fridge layout</button>
         </div>
         <div class="actions" style="gap:8px;align-items:flex-end;flex-wrap:wrap;">
           <label style="font-size:12px;">Preset
@@ -2276,7 +2279,7 @@
     </main>
 
     <aside class="validation">
-      <div class="module-panel" id="fridgeValidationPanel" data-module-panel="fridge">
+      <div class="module-panel" id="fridgeValidationPanel" data-module-panel="fridge" hidden>
       <div class="card">
         <h3>Function Zone Options</h3>
         <div class="card-body" id="fridgeZoneOptionsPanel">Select a function zone.</div>
@@ -2296,7 +2299,7 @@
         </div>
       </div>
       </div>
-      <div class="module-panel" id="generalTallValidationPanel" data-module-panel="generalTall" hidden>
+      <div class="module-panel" id="generalTallValidationPanel" data-module-panel="generalTall">
         <div class="card">
           <h3>Preset</h3>
           <div class="card-body">
@@ -3394,7 +3397,9 @@
     let draggingDisplayIndex = null;
     let pointerDragActive = false;
     let activeDragPointerId = null;
-    let activeModule = "fridge";
+    // ponytail: Fridge module UI gated; GT fridge zone is the product path.
+    const SHOW_FRIDGE_MODULE = false;
+    let activeModule = "generalTall";
     const fridgeState = {
       selectedZoneId: stack[0]?.id || null,
     };
@@ -8981,6 +8986,50 @@
       renderGeneralTallZones();
     }
 
+    /** Classic fridge-cabinet layout in GT (replaces standalone Fridge module UX). */
+    function applyGeneralTallFridgeLayout() {
+      const setVal = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value;
+      };
+      const setCheck = (id, on) => {
+        const el = document.getElementById(id);
+        if (el) el.checked = !!on;
+      };
+      setVal("gtCabinetHeight", 2100);
+      setVal("gtCabinetWidth", 611);
+      setVal("gtCabinetDepth", 616);
+      setVal("gtPanelThickness", 15);
+      setVal("gtFrontPanelThickness", 16);
+      setVal("gtFrontClearance", 2.5);
+      setVal("gtAvoidanceDepth", 300);
+      setVal("gtAvoidanceHeight", 200);
+      setCheck("gtAvoidanceEnabled", true);
+      setCheck("gtFrontPanelsEnabled", true);
+      setCheck("gtLocksEnabled", true);
+      generalTallState.exteriorSide = "right";
+      generalTallState.zones = [
+        { id: "drawer", type: "drawer", height: 250 },
+        {
+          id: "fridge",
+          type: "fridge",
+          height: 1500,
+          applianceWidthMm: 550,
+          applianceDepthMm: 580,
+          applianceHeightMm: 1500,
+        },
+        { id: "flap", type: "top_flap", height: 195 },
+      ];
+      generalTallState.selectedZoneIndex = 1;
+      generalTallState.result = null;
+      generalTallState.blockedResult = null;
+      generalTallState.fusionResult = null;
+      generalTallApplyFridgeExteriorToForm();
+      renderGeneralTallZones();
+      generalTallGenerate();
+      document.getElementById("statusText").textContent = "Loaded fridge layout in General Tall";
+    }
+
     // ---- Generic multi-preset library (dropdown + Load / Save New / Update / Delete) ----
     function createPresetManager(config) {
       function status(text) {
@@ -9680,6 +9729,13 @@
     }
 
     function showModule(moduleName) {
+      if (moduleName === "fridge" && !SHOW_FRIDGE_MODULE) {
+        moduleName = "generalTall";
+        document.getElementById("statusText").textContent =
+          "Fridge module hidden — use General Tall zone type fridge (or Load fridge layout).";
+      }
+      const fridgeNav = document.getElementById("fridgeModuleNav");
+      if (fridgeNav) fridgeNav.hidden = !SHOW_FRIDGE_MODULE;
       activeModule = moduleName;
       document.getElementById("page-design").classList.toggle("overhead-mode", moduleName === "overhead");
       document.getElementById("page-design").classList.toggle("kitchen-mode", moduleName === "kitchen");
@@ -9688,7 +9744,12 @@
         item.classList.toggle("active", item.dataset.module === moduleName);
       });
       document.querySelectorAll("[data-module-panel]").forEach((panel) => {
-        panel.hidden = panel.dataset.modulePanel !== moduleName;
+        const panelModule = panel.dataset.modulePanel;
+        if (panelModule === "fridge" && !SHOW_FRIDGE_MODULE) {
+          panel.hidden = true;
+          return;
+        }
+        panel.hidden = panelModule !== moduleName;
       });
       if (moduleName === "generalTall") {
         hydrateGeneralTallPresetTextarea();
@@ -10089,6 +10150,7 @@
     document.getElementById("generateBtn").addEventListener("click", generate);
     fridgePresetManager.bind();
     document.getElementById("gtGenerateBtn").addEventListener("click", generalTallGenerate);
+    document.getElementById("gtLoadFridgeLayoutBtn").addEventListener("click", applyGeneralTallFridgeLayout);
     document.getElementById("gtCreateFusionBodiesBtn").addEventListener("click", generalTallCreateFusionRoughBodies);
     gtPresetManager.bind();
     document.getElementById("gtExportPresetBtn").addEventListener("click", generalTallExportPresetFile);
@@ -15657,6 +15719,7 @@
     renderGeneralTallZones();
     updateGeneralTallFusionButtonState(null);
     syncCabinetWidthFromFridge();
+    showModule("generalTall");
     calculate();
   </script>
 </body>
