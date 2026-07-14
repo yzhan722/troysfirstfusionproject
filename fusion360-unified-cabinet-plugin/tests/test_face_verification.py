@@ -154,6 +154,23 @@ class FaceVerificationTests(unittest.TestCase):
         self.assertEqual(clamped["y0"], 5)
         self.assertEqual(clamped["y1"], 40)
 
+    def test_prefer_outer_loop_vertices_for_face_bounds(self):
+        from face_verification_fusion import select_face_bound_points
+
+        vertices = [(0, 0, 0), (100, 0, 0), (100, 40, 0), (0, 40, 0)]
+        samples = [(10, 10, 0), (90, 30, 0)]
+        points, source = select_face_bound_points(vertices, samples)
+        self.assertEqual(source, "outer_loop_vertices")
+        self.assertEqual(points, vertices)
+
+        points, source = select_face_bound_points([], samples)
+        self.assertEqual(source, "edge_sample_aabb")
+        self.assertEqual(points, samples)
+
+        points, source = select_face_bound_points([(0, 0, 0)], [])
+        self.assertEqual(source, "none")
+        self.assertEqual(points, [])
+
 
 if __name__ == "__main__":
     unittest.main()

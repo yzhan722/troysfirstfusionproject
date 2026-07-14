@@ -106,6 +106,66 @@ def clamp_bounds_to_panel(bounds: Dict[str, float], panel_bbox: Optional[Dict[st
     return out
 
 
+def select_face_bound_points(
+    outer_loop_vertices_mm: List[Tuple[float, float, float]],
+    edge_sample_points_mm: List[Tuple[float, float, float]],
+) -> Tuple[List[Tuple[float, float, float]], str]:
+    """Prefer outer-loop vertices (exact endpoints); fall back to edge samples.
+
+    Offline-pure helper so v1.2 selection is unit-testable without Fusion.
+    """
+    if len(outer_loop_vertices_mm) >= 3:
+        return list(outer_loop_vertices_mm), "outer_loop_vertices"
+    if edge_sample_points_mm:
+        return list(edge_sample_points_mm), "edge_sample_aabb"
+    return [], "none"
+
+
+def _point3d_to_mm(pt) -> Optional[Tuple[float, float, float]]:
+    try:
+        return (float(pt.x) * 10.0, float(pt.y) * 10.0, float(pt.z) * 10.0)
+    except Exception:
+        return None
+
+
+def _outer_loop_vertex_points_mm(face) -> List[Tuple[float, float, float]]:
+    """Collect unique outer-loop edge endpoint vertices in world mm."""
+    points: List[Tuple[float, float, float]] = []
+    seen = set()
+    try:
+        for loop_index in range(face.loops.count):
+            loop = face.loops.item(loop_index)
+            is_outer = True
+            try:
+                is_outer = bool(loop.isOuter)
+            except Exception:
+                is_outer = True
+            if not is_outer:
+                continue
+            for coedge_index in range(loop.coEdges.count):
+                coedge = loop.coEdges.item(coedge_index)
+                edge = getattr(coedge, "edge", None)
+                if edge is None:
+                    continue
+                for attr in ("startVertex", "endVertex"):
+                    try:
+                        vertex = getattr(edge, attr, None)
+                        geom = getattr(vertex, "geometry", None) if vertex is not None else None
+                        point = _point3d_to_mm(geom) if geom is not None else None
+                    except Exception:
+                        point = None
+                    if point is None:
+                        continue
+                    key = (round(point[0], 4), round(point[1], 4), round(point[2], 4))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    points.append(point)
+    except Exception:
+        return points
+    return points
+
+
 def _sample_face_edge_points_mm(face, max_points: int = 64) -> List[Tuple[float, float, float]]:
     """Sample world-mm points along face edge loops (Fusion-only)."""
     points: List[Tuple[float, float, float]] = []
@@ -160,11 +220,14 @@ def extract_brep_faces_from_body(body, panel: Dict[str, Any]) -> List[Dict[str, 
                 continue
             if not _is_axis_aligned_normal(normal):
                 continue
-            samples = _sample_face_edge_points_mm(face)
-            bounds = bounds_mm_from_points(samples)
+            vertices = _outer_loop_vertex_points_mm(face)
+            samples = [] if len(vertices) >= 3 else _sample_face_edge_points_mm(face)
+            points, bounds_source = select_face_bound_points(vertices, samples)
+            bounds = bounds_mm_from_points(points)
             if not bounds:
                 # Fallback: thin slab at origin using panel bbox span on other axes.
                 bounds = dict(panel_bbox or {})
+                bounds_source = "panel_bbox_fallback"
                 if not bounds:
                     continue
             else:
@@ -180,8 +243,8 @@ def extract_brep_faces_from_body(body, panel: Dict[str, Any]) -> List[Dict[str, 
                     "boundsMm": bounds,
                     "areaMm2": round(_face_area_mm2(face), 4),
                     "source": "fusion_brep",
-                    # ponytail: per-face AABB from edge samples (v1.1); upgrade path = parametric loops
-                    "boundsSource": "edge_sample_aabb" if samples else "panel_bbox_fallback",
+                    # v1.2: outer-loop vertices first; edge-sample AABB only when verts are sparse.
+                    "boundsSource": bounds_source,
                 }
             )
     except Exception:

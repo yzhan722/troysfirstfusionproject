@@ -75,9 +75,10 @@ JSON: `fusion360-unified-cabinet-plugin/tests/output/m5_fusion_smoke_results.jso
 Next: **M6 Generator-Declared Relationships** (sealed).  
 Overhead real-pair face verify: see [`connect-batch-c-checklist.md`](./connect-batch-c-checklist.md).
 
-### Face bounds refinement (2026-07-11)
+### Face bounds refinement (2026-07-11 / v1.2 2026-07-14)
 
-- Fusion `extract_brep_faces_from_body` now builds **per-face AABB** from edge-loop samples, clamped to panel bbox.
+- Fusion `extract_brep_faces_from_body` builds per-face AABB clamped to panel bbox.
+- **v1.2:** prefer **outer-loop edge vertices** (`boundsSource: outer_loop_vertices`); fall back to edge-parameter samples when verts &lt; 3.
 - Axis-aligned normals only (`|n| max ≥ 0.99`); non-aligned faces skipped.
-- Offline helpers: `bounds_mm_from_points`, `clamp_bounds_to_panel` in `face_verification_fusion.py`.
-- Ceiling: parametric outer loops still deferred; method remains `axis_aligned_planar_faces_v1` matching.
+- Offline helpers: `bounds_mm_from_points`, `clamp_bounds_to_panel`, `select_face_bound_points`.
+- Matching method remains `axis_aligned_planar_faces_v1`.

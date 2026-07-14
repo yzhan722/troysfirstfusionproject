@@ -902,6 +902,7 @@ Optional follow-up (not blocking M6):
   ✅ real Overhead pair face verify in Fusion — Batch C SEALED (BP↔FP0, 2026-07-09)
   ✅ offline Overhead BP↔FP0 face_verified on generator golden (Batch C offline)
   ✅ BRep face bounds v1.1 — per-face edge-sample AABB (2026-07-11)
+  ✅ BRep face bounds v1.2 — outer-loop vertices first (2026-07-14)
   ✅ General Tall generator_declared offline (2026-07-11; 4 rail→deck joints)
   ✅ Kitchen generator_declared offline (2026-07-11; B1/B2→B3)
   ✅ Lounge generator_declared offline (2026-07-13; L_SHAPE front→top/side)
@@ -1334,13 +1335,13 @@ Post-M9 scaffold hardware lane is complete.
 - **Kitchen `generator_declared`:** offline sealed 2026-07-11 (2 bottom rail→deck joints).
 - **Lounge `generator_declared`:** offline sealed 2026-07-13 (3 L_SHAPE front→top/side joints).
 - **Fusion Play `--batch declared`:** sealed 2026-07-13 (Kitchen/GT/Lounge create→reconcile→preview screw; smoke removed after PASS).
-- **BRep face bounds v1.1:** Fusion faces use per-face edge-sample AABB (clamped to panel), not full panel bbox.
+- **BRep face bounds v1.2:** outer-loop vertices preferred for face AABB; edge-sample fallback when verts sparse (2026-07-14).
 - **Real-cabinet hardware offline:** all 5 types preview+cut-plan on Overhead BP↔D0 declared joint.
 - Remaining truth gaps: NC consumers of writeback (none yet). Standalone Fridge module **deleted** (recover from git `4bfe809`; GT fridge zone is the user path).
 
 Next options:
-1. Further face-bounds refinements (parametric loops) — M5 ceiling still deferred
-2. NC consumers of panel writeback (none yet)
+1. NC consumers of panel writeback (none yet)
+2. Optional: densify curved outer edges when non-linear BRep edges appear in production cabinets
 
 Checklist: `docs/connect-batch-c-checklist.md` · `docs/connect-post-m9-hardware-type-ui-checklist.md` · `docs/connect-post-m9-scaffold-hardware-checklist.md` · `docs/connect-real-cabinet-hardware-checklist.md` · `docs/connect-m5-face-verification-checklist.md`
 
