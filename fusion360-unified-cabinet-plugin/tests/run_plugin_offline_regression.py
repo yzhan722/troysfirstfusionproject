@@ -42,7 +42,6 @@ def main() -> int:
         failures.append("generator_relationship_regression")
 
     for script in (
-        "run_fridge_bridge_tests.js",
         "run_general_tall_bridge_tests.js",
         "run_overhead_bridge_tests.js",
     ):

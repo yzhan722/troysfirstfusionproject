@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Connect main flow smoke â€” fixture preview/cut + overhead BP-D0 preview.
+"""Connect main flow smoke â€?fixture preview/cut + overhead BP-D0 preview.
 
 Install: python scripts/manage_fusion_smokes.py install --batch main
 """
@@ -29,13 +29,12 @@ def _resolve_plugin_dir(script_file: str) -> str:
 
 
 def _ensure_paths(plugin_dir: str) -> None:
-    # Keep in sync with UnifiedCabinetPlugin._ensure_paths (flat imports under fusion/metadata/â€¦).
+    # Keep in sync with UnifiedCabinetPlugin._ensure_paths (flat imports under fusion/metadata/â€?.
     for path in (
         plugin_dir,
         os.path.join(plugin_dir, "fusion"),
         os.path.join(plugin_dir, "ui"),
         os.path.join(plugin_dir, "modules"),
-        os.path.join(plugin_dir, "modules", "fridge"),
         os.path.join(plugin_dir, "modules", "general_tall"),
         os.path.join(plugin_dir, "modules", "overhead"),
         os.path.join(plugin_dir, "modules", "kitchen"),

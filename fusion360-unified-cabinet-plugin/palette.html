@@ -514,37 +514,10 @@
       text-align: center;
       color: #22344d;
     }
-    .fridge { background: #dcedff; }
     .drawer { background: #eaf7ee; }
     .flap { background: #fff4cf; }
     .blankPanel { background: #f0f2f6; }
     .fixedPanel { background: #ece7ff; }
-    .fridge-front-panel {
-      position: absolute;
-      box-sizing: border-box;
-      border: 2px solid #111827;
-      background: rgba(255, 255, 255, .22);
-      pointer-events: none;
-      z-index: 3;
-    }
-    .fridge-hinge-hole {
-      position: absolute;
-      box-sizing: border-box;
-      border: 2px solid #7c3aed;
-      border-radius: 999px;
-      background: rgba(124, 58, 237, .18);
-      pointer-events: none;
-      z-index: 4;
-    }
-    .fridge-lock-cutout {
-      position: absolute;
-      box-sizing: border-box;
-      border: 2px solid #dc2626;
-      border-radius: 999px;
-      background: rgba(220, 38, 38, .18);
-      pointer-events: none;
-      z-index: 5;
-    }
     .zone-editor {
       border-bottom: 1px solid var(--line);
       margin-bottom: 10px;
@@ -588,7 +561,6 @@
       border-radius: 2px;
       border: 1px solid rgba(0,0,0,.12);
     }
-    .swatch.fridge { background: #4b91ff; }
     .swatch.drawer { background: #36b36a; }
     .swatch.flap { background: #f5b400; }
     .swatch.blankPanel { background: #8b98ab; }
@@ -1542,8 +1514,7 @@
 
   <div class="shell page" id="page-design">
     <aside class="module-nav">
-      <!-- ponytail: Fridge UI hidden; GT fridge zone is the user path. Flip SHOW_FRIDGE_MODULE in script to restore. -->
-      <div class="module" data-module="fridge" id="fridgeModuleNav" hidden>Fridge Cabinet</div>
+      <!-- Fridge removed; recover from git commit before this deletion (see docs/connect-gt-fridge-user-parity-checklist.md) -->
       <div class="module active" data-module="generalTall">General Tall Cabinet</div>
       <div class="module" data-module="overhead">Overhead Cabinet</div>
       <div class="module" data-module="kitchen">Kitchen Cabinet</div>
@@ -1552,91 +1523,11 @@
     </aside>
 
     <aside class="params">
-      <div class="module-panel" id="fridgeParamsPanel" data-module-panel="fridge" hidden>
-      <div class="card">
-        <h3>Cabinet Parameters</h3>
-        <div class="card-body">
-          <div class="grid2">
-            <label>Cabinet Width <input id="cabinetWidth" type="number" value="611"></label>
-            <label>Cabinet Depth <input id="cabinetDepth" type="number" value="616"></label>
-          </div>
-          <div class="grid2">
-            <label>Cabinet Height <input id="cabinetHeight" type="number" value="2100"></label>
-            <label>Panel Thickness <input id="panelThickness" type="number" value="15"></label>
-          </div>
-          <label>Exterior Side
-            <select id="exteriorSide">
-              <option value="right">Right</option>
-              <option value="left">Left</option>
-              <option value="none">None</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Fridge Parameters</h3>
-        <div class="card-body">
-          <div class="grid2">
-            <label>Width <input id="fridgeWidth" type="number" value="550"></label>
-            <label>Depth <input id="fridgeDepth" type="number" value="580"></label>
-          </div>
-          <label>Height <input id="fridgeHeight" type="number" value="1470"></label>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Clearance and Avoidance</h3>
-        <div class="card-body">
-          <div class="grid2">
-            <label>Top Clearance <input id="topClearance" type="number" value="55"></label>
-            <label>Bottom Clearance <input id="bottomClearance" type="number" value="68"></label>
-          </div>
-          <label><span><input id="avoidanceEnabled" type="checkbox" checked style="width:auto"> Enable wheel avoidance</span></label>
-          <div class="grid2">
-            <label>Avoidance Height <input id="avoidanceHeight" type="number" value="200"></label>
-            <label>Avoidance Depth <input id="avoidanceDepth" type="number" value="300"></label>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Front Panels / Hardware</h3>
-        <div class="card-body">
-          <label><span><input id="fridgeFrontPanelsEnabled" type="checkbox" checked style="width:auto"> Enable front panels</span></label>
-          <div class="grid2">
-            <label>Front Thickness <input id="fridgeFrontPanelThickness" type="number" value="16"></label>
-            <label>Front Clearance <input id="fridgeFrontClearance" type="number" value="2.5" step="0.1"></label>
-          </div>
-          <label><span><input id="fridgeLocksEnabled" type="checkbox" checked style="width:auto"> Enable locks</span></label>
-          <label>Lock Style
-            <select id="fridgeLockPreset">
-              <option value="razor_long_rounded_1">Razor Long Rounded 1</option>
-            </select>
-          </label>
-          <div class="grid2">
-            <label>Hinge Cup Diameter <input id="fridgeHingeCupDiameter" type="number" value="35" step="0.1"></label>
-            <label>Hinge Cup Depth <input id="fridgeHingeCupDepth" type="number" value="12.5" step="0.1"></label>
-          </div>
-          <div class="grid2">
-            <label>Cup From Edge <input id="fridgeHingeCupFromEdge" type="number" value="22.5" step="0.1"></label>
-            <label>Default Hinge Side <input id="fridgeHingeSideDistance" value="auto"></label>
-          </div>
-          <label>Use 3 Hinges
-            <select id="fridgeUseThreeHinges">
-              <option value="false" selected>No</option>
-              <option value="true">Yes</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      </div>
       <div class="module-panel" id="generalTallParamsPanel" data-module-panel="generalTall">
         <div class="card">
           <h3>General Tall Cabinet</h3>
           <div class="card-body">
-            <div class="message" style="margin-bottom:8px;">Fridge cabinets: use zone type <strong>fridge</strong>, or click <strong>Load fridge layout</strong> in the workspace. (Standalone Fridge module is hidden.)</div>
+            <div class="message" style="margin-bottom:8px;">Fridge cabinets: use zone type <strong>fridge</strong>, or click <strong>Load fridge layout</strong> in the workspace.</div>
             <div class="grid2">
               <label>Cabinet Height / CH <input id="gtCabinetHeight" type="number" value="2000"></label>
               <label>Cabinet Width / CW <input id="gtCabinetWidth" type="number" value="600"></label>
@@ -1860,50 +1751,6 @@
     </aside>
 
     <main class="workspace">
-      <div class="module-panel" id="fridgeWorkspacePanel" data-module-panel="fridge" hidden>
-      <div class="actions">
-        <button class="ghost" id="calculateBtn">Calculate</button>
-        <button class="ghost" id="validateBtn">Validate</button>
-        <button class="primary" id="generateBtn">Generate Bodies</button>
-      </div>
-      <div class="actions" style="gap:8px;align-items:flex-end;flex-wrap:wrap;">
-        <label style="font-size:12px;">Preset
-          <select id="fridgePresetSelect" style="min-width:170px;">
-            <option value="">(no saved presets)</option>
-          </select>
-        </label>
-        <label style="font-size:12px;">Name <input type="text" id="fridgePresetName" placeholder="new preset name" style="width:140px;"></label>
-        <button class="ghost" id="fridgePresetLoadBtn">Load</button>
-        <button class="ghost" id="fridgePresetSaveNewBtn">Save New</button>
-        <button class="ghost" id="fridgePresetUpdateBtn">Update</button>
-        <button class="ghost" id="fridgePresetDeleteBtn">Delete</button>
-      </div>
-      <div class="actions" style="gap:8px;align-items:flex-end;">
-        <label style="font-size:12px;">Assembly Name <input type="text" id="fridgeAssemblyName" placeholder="auto" style="width:160px;"></label>
-        <label style="font-size:12px;">Origin X (mm) <input type="number" id="fridgeOriginX" placeholder="auto" step="100" style="width:110px;"></label>
-        <label style="font-size:12px;">Origin Y (mm) <input type="number" id="fridgeOriginY" placeholder="auto" step="100" style="width:110px;"></label>
-      </div>
-
-      <div class="card">
-        <h3>Fridge Cabinet</h3>
-        <div class="preview"><div class="cabinet-svg" id="cabinetPreview"></div></div>
-      </div>
-
-      <div class="card">
-        <h3>Layout / Functional Zones</h3>
-        <div class="card-body">
-          <div class="zone-editor">
-            <div id="zoneInputs"></div>
-            <button class="ghost" id="addDrawer">Add</button>
-          </div>
-          <table>
-            <thead><tr><th></th><th>#</th><th>Type</th><th>Height</th><th>Panel</th><th>z0</th><th>z1</th></tr></thead>
-            <tbody id="layoutRows"></tbody>
-          </table>
-        </div>
-      </div>
-      </div>
-
       <div class="module-panel" id="generalTallWorkspacePanel" data-module-panel="generalTall">
         <div class="actions">
           <button class="primary" id="gtGenerateBtn">Generate General Tall Data</button>
@@ -2279,26 +2126,6 @@
     </main>
 
     <aside class="validation">
-      <div class="module-panel" id="fridgeValidationPanel" data-module-panel="fridge" hidden>
-      <div class="card">
-        <h3>Function Zone Options</h3>
-        <div class="card-body" id="fridgeZoneOptionsPanel">Select a function zone.</div>
-      </div>
-      <div class="card">
-        <h3>Validation and Warnings</h3>
-        <div class="card-body" id="validationMessages"></div>
-      </div>
-      <div class="card">
-        <h3>Generated Structural Mode</h3>
-        <div class="card-body" id="structuralMode"></div>
-      </div>
-      <div class="card">
-        <h3>Generation Result</h3>
-        <div class="card-body">
-          <pre id="resultBox" style="white-space:pre-wrap;margin:0;max-height:240px;overflow:auto"></pre>
-        </div>
-      </div>
-      </div>
       <div class="module-panel" id="generalTallValidationPanel" data-module-panel="generalTall">
         <div class="card">
           <h3>Preset</h3>
@@ -3372,7 +3199,6 @@
     <span id="heightDiff"></span>
   </div>
 
-  <script src="../Fridge%20Cabinet%20Generator/fridge_logic.js"></script>
   <script src="nesting/preflight.js"></script>
   <script src="panel_attributes/color_preset_library.js"></script>
   <script>
@@ -3386,23 +3212,7 @@
         if (bridgeState) bridgeState.textContent = `JS error: ${event.message}`;
       } catch (ignore) { /* never block error propagation */ }
     });
-    let stack = [
-      { id: "flap", type: "flap", height: 195 },
-      { id: "drawer", type: "drawer", height: 250 },
-      { id: "fridge", type: "fridge", height: 1470 },
-    ];
-    let lastPureParams = null;
-    let lastBoardPlan = null;
-    let lastVVerify = null;
-    let draggingDisplayIndex = null;
-    let pointerDragActive = false;
-    let activeDragPointerId = null;
-    // ponytail: Fridge module UI gated; GT fridge zone is the product path.
-    const SHOW_FRIDGE_MODULE = false;
     let activeModule = "generalTall";
-    const fridgeState = {
-      selectedZoneId: stack[0]?.id || null,
-    };
     const generalTallState = {
       result: null,
       blockedResult: null,
@@ -3627,19 +3437,6 @@
       lastRenderScale: 0.3,
       lastViewBoxWidth: 860,
     };
-
-    function numberValue(id) {
-      return Number(document.getElementById(id).value || 0);
-    }
-
-    function widthAllowance() {
-      return document.getElementById("exteriorSide").value === "none" ? 45 : 61;
-    }
-
-    function setNumberValue(id, value) {
-      const input = document.getElementById(id);
-      if (input) input.value = String(Math.max(0, Math.round(Number(value) || 0)));
-    }
 
     function kitchenId(prefix) {
       return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -4884,535 +4681,6 @@
     function kitchenSelect(selection) {
       kitchenState.selection = selection || { type: "kitchen" };
       renderKitchenUi();
-    }
-
-    function syncCabinetWidthFromFridge() {
-      setNumberValue("cabinetWidth", numberValue("fridgeWidth") + widthAllowance());
-    }
-
-    function syncFridgeWidthFromCabinet() {
-      setNumberValue("fridgeWidth", numberValue("cabinetWidth") - widthAllowance());
-    }
-
-    function syncFirstFridgeZoneHeight(height) {
-      const fridge = stack.find((section) => section.type === "fridge");
-      if (fridge) fridge.height = Math.max(0, Number(height) || 0);
-    }
-
-    function syncFridgeInputHeight(height) {
-      const input = document.getElementById("fridgeHeight");
-      if (input) input.value = String(Math.max(0, Number(height) || 0));
-    }
-
-    function fridgeHingeSideDistanceValue() {
-      const raw = String(document.getElementById("fridgeHingeSideDistance")?.value || "auto").trim();
-      if (raw === "" || raw.toLowerCase() === "auto") return "auto";
-      const value = Number(raw);
-      return Number.isFinite(value) ? value : "auto";
-    }
-
-    function currentUiState() {
-      return {
-        cabinet: {
-          width: numberValue("cabinetWidth"),
-          depth: numberValue("cabinetDepth"),
-          height: numberValue("cabinetHeight"),
-          panelThickness: numberValue("panelThickness"),
-          exteriorSide: document.getElementById("exteriorSide").value,
-        },
-        fridge: {
-          width: numberValue("fridgeWidth"),
-          depth: numberValue("fridgeDepth"),
-          height: numberValue("fridgeHeight"),
-        },
-        clearances: {
-          top: numberValue("topClearance"),
-          bottom: numberValue("bottomClearance"),
-        },
-        wheelAvoidance: {
-          enabled: document.getElementById("avoidanceEnabled").checked,
-          height: numberValue("avoidanceHeight"),
-          depth: numberValue("avoidanceDepth"),
-        },
-        frontHardwareSettings: {
-          frontPanelsEnabled: document.getElementById("fridgeFrontPanelsEnabled").checked,
-          frontPanelThickness: numberValue("fridgeFrontPanelThickness"),
-          frontClearance: numberValue("fridgeFrontClearance"),
-          locksEnabled: document.getElementById("fridgeLocksEnabled").checked,
-          lockPresetId: document.getElementById("fridgeLockPreset").value,
-          defaultHingeSettings: {
-            cupDiameter: numberValue("fridgeHingeCupDiameter"),
-            cupDepth: numberValue("fridgeHingeCupDepth"),
-            cupCenterFromEdge: numberValue("fridgeHingeCupFromEdge"),
-            useThreeHinges: document.getElementById("fridgeUseThreeHinges").value === "true",
-            sideDistance: fridgeHingeSideDistanceValue(),
-          },
-        },
-        stack: stack.map((section) => ({ ...section })),
-      };
-    }
-
-    function buildAll() {
-      const logic = window.FridgeCabinetLogic;
-      if (!logic) throw new Error("FridgeCabinetLogic failed to load.");
-      const pureParams = logic.buildPureParams(currentUiState());
-      const boardPlan = logic.buildBoardPlan(pureParams);
-      if (typeof logic.buildAssemblyPlacementPlan === "function") {
-        logic.buildAssemblyPlacementPlan(pureParams, boardPlan);
-      }
-      const vVerify = logic.verifyVSeriesVectors(pureParams, boardPlan);
-      lastPureParams = pureParams;
-      lastBoardPlan = boardPlan;
-      lastVVerify = vVerify;
-      render(pureParams, boardPlan, vVerify);
-      return { pureParams, boardPlan, vVerify };
-    }
-
-    function render(pureParams, boardPlan, vVerify) {
-      renderZones();
-      renderPreview(pureParams);
-      renderLayoutRows(pureParams);
-      renderFridgeZoneOptions(pureParams);
-      renderValidation(pureParams, boardPlan, vVerify);
-      renderStructuralMode(pureParams);
-      const diff = pureParams.layout.totalStackHeight - pureParams.layout.cabinetHeight;
-      document.getElementById("heightDiff").textContent = `Stack difference: ${diff} mm`;
-      document.getElementById("statusText").textContent = pureParams.validation.ok ? "Ready to generate" : "Validation required";
-    }
-
-    function zoneClass(type) {
-      return type === "empty" ? "blankPanel" : String(type || "blankPanel");
-    }
-
-    function displayStackTopDown() {
-      return stack.map((section, index) => ({ section, index })).reverse();
-    }
-
-    function renderZones() {
-      const host = document.getElementById("zoneInputs");
-      host.innerHTML = displayStackTopDown().map(({ section, index }, displayIndex) => `
-        <div class="zone-input-row" data-zone-index="${index}" data-display-index="${displayIndex}" data-fridge-zone-row="${section.id}" style="${fridgeState.selectedZoneId === section.id ? "outline:2px solid #0f6bff;outline-offset:-2px;background:#eef5ff;" : ""}">
-          <span class="drag-handle" draggable="true" data-drag-handle="${displayIndex}" title="Drag to reorder">::</span>
-          <span class="swatch ${zoneClass(section.type)}"></span>
-          <label>Type
-            <select data-zone-type="${index}">
-              ${["fridge", "drawer", "flap", "blankPanel", "fixedPanel"].map((type) => `<option value="${type}" ${type === section.type ? "selected" : ""}>${type}</option>`).join("")}
-            </select>
-          </label>
-          <label>Height
-            <input type="number" value="${section.height}" data-zone-height="${index}">
-          </label>
-          <button class="icon-delete" data-zone-delete="${index}" title="Delete zone" aria-label="Delete zone">
-            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-              <path fill="currentColor" d="M6 2h4l.7 1H14v1H2V3h3.3L6 2Zm-2 3h8l-.6 9H4.6L4 5Zm2 1v7h1V6H6Zm3 0v7h1V6H9Z"/>
-            </svg>
-          </button>
-        </div>
-      `).join("");
-      host.querySelectorAll("[data-zone-type]").forEach((input) => {
-        input.addEventListener("change", () => {
-          const index = Number(input.dataset.zoneType);
-          stack[index].type = input.value;
-          if (input.value === "fridge") {
-            stack[index].height = numberValue("fridgeHeight");
-          }
-          calculate();
-        });
-      });
-      host.querySelectorAll("[data-zone-height]").forEach((input) => {
-        input.addEventListener("change", () => {
-          const index = Number(input.dataset.zoneHeight);
-          stack[index].height = Number(input.value || 0);
-          if (stack[index].type === "fridge") {
-            syncFridgeInputHeight(stack[index].height);
-          }
-          calculate();
-        });
-      });
-      host.querySelectorAll("[data-zone-delete]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const index = Number(button.dataset.zoneDelete);
-          if (fridgeState.selectedZoneId === stack[index]?.id) fridgeState.selectedZoneId = stack[index + 1]?.id || stack[index - 1]?.id || null;
-          stack.splice(index, 1);
-          calculate();
-        });
-      });
-      host.querySelectorAll("[data-fridge-zone-row]").forEach((row) => {
-        row.addEventListener("click", (event) => {
-          if (event.target.closest("input,select,button,[data-drag-handle]")) return;
-          fridgeState.selectedZoneId = row.dataset.fridgeZoneRow;
-          calculate();
-        });
-      });
-      host.querySelectorAll("[data-drag-handle]").forEach((handle) => {
-        handle.addEventListener("pointerdown", (event) => startZonePointerDrag(event, handle));
-        handle.addEventListener("mousedown", (event) => startZoneMouseDrag(event, handle));
-        handle.addEventListener("dragstart", (event) => {
-          draggingDisplayIndex = Number(handle.dataset.dragHandle);
-          const row = handle.closest(".zone-input-row");
-          if (row) row.classList.add("dragging");
-          if (event.dataTransfer) {
-            event.dataTransfer.setData("text/plain", handle.dataset.dragHandle);
-            event.dataTransfer.effectAllowed = "move";
-          }
-        });
-        handle.addEventListener("dragend", () => {
-          draggingDisplayIndex = null;
-          pointerDragActive = false;
-          activeDragPointerId = null;
-          clearDragClasses();
-        });
-      });
-
-      host.querySelectorAll(".zone-input-row").forEach((row) => {
-        row.addEventListener("dragover", (event) => {
-          event.preventDefault();
-          clearDragOverClasses();
-          row.classList.add("drag-over");
-          if (event.dataTransfer) {
-            event.dataTransfer.dropEffect = "move";
-          }
-        });
-        row.addEventListener("drop", (event) => {
-          event.preventDefault();
-          const fromData = event.dataTransfer ? event.dataTransfer.getData("text/plain") : "";
-          const from = Number.isInteger(draggingDisplayIndex) ? draggingDisplayIndex : Number(fromData);
-          const to = Number(row.dataset.displayIndex);
-          clearDragClasses();
-          swapDisplayStack(from, to);
-        });
-      });
-    }
-
-    function deleteSelectedFridgeZone() {
-      if (!stack.length) return;
-      const selectedIndex = stack.findIndex((section) => section.id === fridgeState.selectedZoneId);
-      const index = selectedIndex >= 0 ? selectedIndex : stack.length - 1;
-      if (fridgeState.selectedZoneId === stack[index]?.id) {
-        fridgeState.selectedZoneId = stack[index + 1]?.id || stack[index - 1]?.id || null;
-      }
-      stack.splice(index, 1);
-      calculate();
-    }
-
-    function startZonePointerDrag(event, handle) {
-      draggingDisplayIndex = Number(handle.dataset.dragHandle);
-      pointerDragActive = true;
-      activeDragPointerId = event.pointerId;
-      const row = handle.closest(".zone-input-row");
-      if (row) row.classList.add("dragging");
-      document.addEventListener("pointermove", moveZonePointerDrag);
-      document.addEventListener("pointerup", finishZonePointerDrag, { once: true });
-      event.preventDefault();
-    }
-
-    function startZoneMouseDrag(event, handle) {
-      if (pointerDragActive) return;
-      draggingDisplayIndex = Number(handle.dataset.dragHandle);
-      pointerDragActive = true;
-      const row = handle.closest(".zone-input-row");
-      if (row) row.classList.add("dragging");
-      document.addEventListener("mousemove", moveZoneMouseDrag);
-      document.addEventListener("mouseup", finishZoneMouseDrag, { once: true });
-      event.preventDefault();
-    }
-
-    function moveZonePointerDrag(event) {
-      if (!pointerDragActive || (activeDragPointerId !== null && event.pointerId !== activeDragPointerId)) return;
-      moveZoneDragAt(event.clientX, event.clientY);
-      event.preventDefault();
-    }
-
-    function moveZoneMouseDrag(event) {
-      if (!pointerDragActive) return;
-      moveZoneDragAt(event.clientX, event.clientY);
-      event.preventDefault();
-    }
-
-    function moveZoneDragAt(clientX, clientY) {
-      const hit = document.elementFromPoint(clientX, clientY);
-      const row = hit && hit.closest ? hit.closest(".zone-input-row") : null;
-      if (!row) return;
-      const to = Number(row.dataset.displayIndex);
-      if (!Number.isInteger(to) || to === draggingDisplayIndex) return;
-      swapDisplayStack(draggingDisplayIndex, to, true);
-      draggingDisplayIndex = to;
-      const nextRow = document.querySelector(`.zone-input-row[data-display-index="${to}"]`);
-      if (nextRow) {
-        clearDragClasses();
-        nextRow.classList.add("dragging");
-        nextRow.classList.add("drag-over");
-      }
-    }
-
-    function finishZonePointerDrag(event) {
-      document.removeEventListener("pointermove", moveZonePointerDrag);
-      activeDragPointerId = null;
-      finishZoneDrag(event);
-    }
-
-    function finishZoneMouseDrag(event) {
-      document.removeEventListener("mousemove", moveZoneMouseDrag);
-      finishZoneDrag(event);
-    }
-
-    function clearDragOverClasses() {
-      document.querySelectorAll(".zone-input-row.drag-over").forEach((row) => row.classList.remove("drag-over"));
-    }
-
-    function clearDragClasses() {
-      document.querySelectorAll(".zone-input-row.dragging").forEach((row) => row.classList.remove("dragging"));
-      clearDragOverClasses();
-    }
-
-    function finishZoneDrag(event) {
-      if (!pointerDragActive) return;
-      const hit = document.elementFromPoint(event.clientX, event.clientY);
-      const row = hit && hit.closest ? hit.closest(".zone-input-row") : null;
-      pointerDragActive = false;
-      draggingDisplayIndex = null;
-      clearDragClasses();
-    }
-
-    function swapDisplayStack(fromDisplayIndex, toDisplayIndex, renderOnly) {
-      if (!Number.isInteger(fromDisplayIndex) || !Number.isInteger(toDisplayIndex) || fromDisplayIndex === toDisplayIndex) return;
-      const displaySections = displayStackTopDown().map(({ section }) => section);
-      const fromSection = displaySections[fromDisplayIndex];
-      displaySections[fromDisplayIndex] = displaySections[toDisplayIndex];
-      displaySections[toDisplayIndex] = fromSection;
-      stack = displaySections.slice().reverse();
-      if (!renderOnly) draggingDisplayIndex = null;
-      calculate();
-    }
-
-    function renderPreview(pureParams) {
-      const box = document.getElementById("cabinetPreview");
-      const height = Number(pureParams.layout.cabinetHeight || 1);
-      const cabinetWidth = Number(pureParams.base?.Cw || pureParams.input?.cabinet?.width || 1);
-      const regions = [
-        ...pureParams.layout.sections.map((section) => ({ ...section, label: section.type })),
-      ];
-      const sectionHtml = regions.map((section) => {
-        const top = 100 - (section.z1 / height * 100);
-        const h = Math.max(4, section.height / height * 100);
-        const cls = zoneClass(section.type);
-        const selected = fridgeState.selectedZoneId === section.id;
-        return `<div class="zone ${cls}" data-fridge-preview-zone="${escapeHtml(section.id)}" style="top:${top}%;height:${h}%;outline:${selected ? "3px solid #0f6bff" : "none"}">${section.label}<br>${section.height} mm</div>`;
-      }).join("");
-      const frontPanels = Array.isArray(lastBoardPlan?.frontPanels) ? lastBoardPlan.frontPanels : [];
-      const frontHtml = frontPanels.map((panel) => {
-        const left = Number(panel.x0 || 0) / cabinetWidth * 100;
-        const widthPct = Math.max(0, Number(panel.width || 0) / cabinetWidth * 100);
-        const top = 100 - (Number(panel.z1 || 0) / height * 100);
-        const h = Math.max(1, Number(panel.height || 0) / height * 100);
-        const selected = panel.sectionId === fridgeState.selectedZoneId;
-        return `<div class="fridge-front-panel" title="${escapeHtml(panel.resolvedType)} ${escapeHtml(panel.width)}x${escapeHtml(panel.height)}" style="left:${left}%;width:${widthPct}%;top:${top}%;height:${h}%;border-color:${selected ? "#0f6bff" : "#111827"}"></div>`;
-      }).join("");
-      const hingeHtml = frontPanels.flatMap((panel) => (panel.hingeHoles || []).map((hole) => {
-        const d = Number(hole.diameter || 35);
-        const left = (Number(hole.centerX || 0) - d / 2) / cabinetWidth * 100;
-        const widthPct = d / cabinetWidth * 100;
-        const top = 100 - ((Number(hole.centerZ || 0) + d / 2) / height * 100);
-        const h = d / height * 100;
-        return `<div class="fridge-hinge-hole" style="left:${left}%;width:${widthPct}%;top:${top}%;height:${h}%;"></div>`;
-      })).join("");
-      const lockHtml = frontPanels.flatMap((panel) => panel.lockCutout ? [panel.lockCutout].map((cutout) => {
-        const left = Number(cutout.x0 || 0) / cabinetWidth * 100;
-        const widthPct = Number(cutout.width || 0) / cabinetWidth * 100;
-        const top = 100 - (Number(cutout.z1 || 0) / height * 100);
-        const h = Number(cutout.height || 0) / height * 100;
-        return `<div class="fridge-lock-cutout" style="left:${left}%;width:${widthPct}%;top:${top}%;height:${h}%;"></div>`;
-      }) : []).join("");
-      box.innerHTML = `${sectionHtml}${frontHtml}${hingeHtml}${lockHtml}`;
-      box.querySelectorAll("[data-fridge-preview-zone]").forEach((el) => {
-        el.addEventListener("click", () => {
-          fridgeState.selectedZoneId = el.dataset.fridgePreviewZone;
-          calculate();
-        });
-      });
-    }
-
-    function renderFridgeZoneOptions(pureParams) {
-      const host = document.getElementById("fridgeZoneOptionsPanel");
-      if (!host) return;
-      const sections = pureParams?.layout?.sections || [];
-      const selected = sections.find((section) => section.id === fridgeState.selectedZoneId) || sections[0];
-      if (!selected) {
-        host.innerHTML = `<div class="message">No function zones.</div>`;
-        return;
-      }
-      fridgeState.selectedZoneId = selected.id;
-      const zone = stack.find((section) => section.id === selected.id);
-      const frontPanel = (lastBoardPlan?.frontPanels || []).find((panel) => panel.sectionId === selected.id);
-      const supportsFront = ["drawer", "flap", "blankPanel", "fixedPanel"].includes(selected.type);
-      const supportsLock = frontPanel && ["drawer", "up_flap", "down_flap"].includes(frontPanel.resolvedType);
-      const supportsHinge = frontPanel && ["up_flap", "down_flap"].includes(frontPanel.resolvedType);
-      host.innerHTML = `
-        <div class="message ok">Selected: ${escapeHtml(selected.type)} / ${escapeHtml(selected.id)}</div>
-        <div class="grid2" style="margin-top:8px;">
-          <label>Type <input class="oh-readonly" readonly value="${escapeHtml(selected.type)}"></label>
-          <label>Height <input id="fridgePropZoneHeight" type="number" value="${escapeHtml(selected.height)}"></label>
-          <label>Z0 <input class="oh-readonly" readonly value="${escapeHtml(selected.z0)}"></label>
-          <label>Z1 <input class="oh-readonly" readonly value="${escapeHtml(selected.z1)}"></label>
-        </div>
-        ${supportsFront ? `
-          <div class="message" style="margin-top:8px;">Front panel / hardware phase 1 metadata</div>
-          <div class="grid2" style="margin-top:8px;">
-            <label>Front Panel
-              <select id="fridgePropFrontPanelEnabled">
-                <option value="true" ${zone?.frontPanelEnabled === false ? "" : "selected"}>Enabled</option>
-                <option value="false" ${zone?.frontPanelEnabled === false ? "selected" : ""}>Disabled</option>
-              </select>
-            </label>
-            <label>Lock
-              <select id="fridgePropLockEnabled" ${supportsLock ? "" : "disabled"}>
-                <option value="true" ${zone?.lockEnabled === false ? "" : "selected"}>Enabled</option>
-                <option value="false" ${zone?.lockEnabled === false ? "selected" : ""}>Disabled</option>
-              </select>
-            </label>
-            <label>Resolved Type <input class="oh-readonly" readonly value="${escapeHtml(frontPanel?.resolvedType || "-")}"></label>
-            <label>Generated Body <input class="oh-readonly" readonly value="${frontPanel ? (frontPanel.generatedAsNewBody ? "new" : `reuse ${frontPanel.reusedExistingBoardId || ""}`) : "-"}"></label>
-            <label>Panel X0 <input class="oh-readonly" readonly value="${escapeHtml(frontPanel?.x0 ?? "")}"></label>
-            <label>Panel X1 <input class="oh-readonly" readonly value="${escapeHtml(frontPanel?.x1 ?? "")}"></label>
-            <label>Panel Z0 <input class="oh-readonly" readonly value="${escapeHtml(frontPanel?.z0 ?? "")}"></label>
-            <label>Panel Z1 <input class="oh-readonly" readonly value="${escapeHtml(frontPanel?.z1 ?? "")}"></label>
-            <label>Z0 Source <input class="oh-readonly" readonly value="${escapeHtml(frontPanel?.z0Source || "")}"></label>
-            <label>Z1 Source <input class="oh-readonly" readonly value="${escapeHtml(frontPanel?.z1Source || "")}"></label>
-          </div>
-          ${supportsHinge ? `
-            <details open style="margin-top:8px;">
-              <summary>Hinge Settings</summary>
-              <div class="grid2" style="margin-top:8px;">
-                <label>Hinge Enabled
-                  <select id="fridgePropHingeEnabled">
-                    <option value="true" ${zone?.hingeEnabled === false ? "" : "selected"}>Enabled</option>
-                    <option value="false" ${zone?.hingeEnabled === false ? "selected" : ""}>Disabled</option>
-                  </select>
-                </label>
-                <label>Side Distance <input id="fridgePropHingeSideDistance" value="${escapeHtml(zone?.hingeSettings?.sideDistance ?? "auto")}"></label>
-                <label>Cup Diameter <input id="fridgePropHingeCupDiameter" type="number" value="${escapeHtml(zone?.hingeSettings?.cupDiameter ?? document.getElementById("fridgeHingeCupDiameter").value)}"></label>
-                <label>Cup Depth <input id="fridgePropHingeCupDepth" type="number" value="${escapeHtml(zone?.hingeSettings?.cupDepth ?? document.getElementById("fridgeHingeCupDepth").value)}"></label>
-                <label>Cup From Edge <input id="fridgePropHingeCupFromEdge" type="number" value="${escapeHtml(zone?.hingeSettings?.cupCenterFromEdge ?? document.getElementById("fridgeHingeCupFromEdge").value)}"></label>
-                <label>Use 3 Hinges
-                  <select id="fridgePropUseThreeHinges">
-                    <option value="false" ${zone?.hingeSettings?.useThreeHinges === true ? "" : "selected"}>No</option>
-                    <option value="true" ${zone?.hingeSettings?.useThreeHinges === true ? "selected" : ""}>Yes</option>
-                  </select>
-                </label>
-              </div>
-            </details>` : ""}
-          ${frontPanel?.lockCutout ? `<div class="message" style="margin-top:8px;">Lock center: X ${escapeHtml(frontPanel.lockCutout.centerX)}, Z ${escapeHtml(frontPanel.lockCutout.centerZ)} / ${escapeHtml(frontPanel.lockCutout.width)} x ${escapeHtml(frontPanel.lockCutout.height)}</div>` : ""}
-          ${frontPanel?.hingeHoles?.length ? `<div class="message" style="margin-top:8px;">Hinge holes: ${escapeHtml(frontPanel.hingeHoles.map((h) => `(${Math.round(h.centerX)}, ${Math.round(h.centerZ)})`).join(" "))}</div>` : ""}
-        ` : `<div class="message" style="margin-top:8px;">No front panel generated for fridge zone.</div>`}`;
-      const heightInput = document.getElementById("fridgePropZoneHeight");
-      if (heightInput) heightInput.addEventListener("change", () => {
-        const selectedZone = stack.find((section) => section.id === selected.id);
-        if (!selectedZone) return;
-        selectedZone.height = Math.max(0, Number(heightInput.value || 0));
-        if (selectedZone.type === "fridge") syncFridgeInputHeight(selectedZone.height);
-        calculate();
-      });
-      bindFridgeFrontZoneOptions(selected.id);
-    }
-
-    function parseFridgeSideDistanceInput(value) {
-      const raw = String(value == null ? "" : value).trim();
-      if (raw === "" || raw.toLowerCase() === "auto") return "auto";
-      const n = Number(raw);
-      return Number.isFinite(n) ? n : "auto";
-    }
-
-    function bindFridgeFrontZoneOptions(sectionId) {
-      const zone = stack.find((section) => section.id === sectionId);
-      if (!zone) return;
-      const frontEnabled = document.getElementById("fridgePropFrontPanelEnabled");
-      if (frontEnabled) frontEnabled.addEventListener("change", () => {
-        zone.frontPanelEnabled = frontEnabled.value === "true";
-        calculate();
-      });
-      const lockEnabled = document.getElementById("fridgePropLockEnabled");
-      if (lockEnabled) lockEnabled.addEventListener("change", () => {
-        zone.lockEnabled = lockEnabled.value === "true";
-        calculate();
-      });
-      const hingeEnabled = document.getElementById("fridgePropHingeEnabled");
-      if (hingeEnabled) hingeEnabled.addEventListener("change", () => {
-        zone.hingeEnabled = hingeEnabled.value === "true";
-        calculate();
-      });
-      const hingeBindings = [
-        ["fridgePropHingeCupDiameter", "cupDiameter", Number],
-        ["fridgePropHingeCupDepth", "cupDepth", Number],
-        ["fridgePropHingeCupFromEdge", "cupCenterFromEdge", Number],
-        ["fridgePropHingeSideDistance", "sideDistance", parseFridgeSideDistanceInput],
-      ];
-      hingeBindings.forEach(([id, key, parser]) => {
-        const input = document.getElementById(id);
-        if (!input) return;
-        input.addEventListener("change", () => {
-          zone.hingeSettings = { ...(zone.hingeSettings || {}) };
-          zone.hingeSettings[key] = parser(input.value);
-          calculate();
-        });
-      });
-      const useThree = document.getElementById("fridgePropUseThreeHinges");
-      if (useThree) useThree.addEventListener("change", () => {
-        zone.hingeSettings = { ...(zone.hingeSettings || {}) };
-        zone.hingeSettings.useThreeHinges = useThree.value === "true";
-        calculate();
-      });
-    }
-
-    function segmentLabel(segment) {
-      if (!segment) return "-";
-      if (segment.segmentKind === "endClearance") return "end clearance";
-      if (segment.segmentKind === "panel") {
-        const rule = segment.panelThicknessRule === "boundary" ? "boundary" : "middle";
-        const t = segment.panelThickness != null ? segment.panelThickness : segment.height;
-        return `${rule} (${t} mm)`;
-      }
-      if (segment.segmentKind === "functionZone") return "function zone";
-      return segment.type || "-";
-    }
-
-    function renderLayoutRows(pureParams) {
-      const segments = pureParams.layout.displaySegments || [];
-      document.getElementById("layoutRows").innerHTML = segments
-        .slice()
-        .reverse()
-        .map((segment, displayIndex) => {
-          const type = segment.segmentKind === "functionZone" ? segment.type : segment.type || segment.segmentKind;
-          const height = segment.height != null ? segment.height : segment.z1 != null && segment.z0 != null ? segment.z1 - segment.z0 : "-";
-          const panelCol = segment.segmentKind === "panel" ? segmentLabel(segment) : segment.segmentKind === "endClearance" ? segmentLabel(segment) : "-";
-          const z0 = segment.z0 != null ? segment.z0 : "";
-          const z1 = segment.z1 != null ? segment.z1 : "";
-          const swatch = segment.segmentKind === "functionZone" ? zoneClass(type) : segment.segmentKind === "panel" ? "blankPanel" : "fixedPanel";
-          return `<tr><td><span class="swatch ${swatch}"></span></td><td>${displayIndex + 1}</td><td>${type}</td><td>${height}</td><td>${panelCol}</td><td>${z0}</td><td>${z1}</td></tr>`;
-        })
-        .join("");
-    }
-
-    function renderValidation(pureParams, boardPlan, vVerify) {
-      const validation = pureParams.validation || {};
-      const messages = [];
-      (validation.errors || []).forEach((msg) => messages.push(`<div class="message error">Error: ${msg}</div>`));
-      (validation.warnings || []).forEach((msg) => messages.push(`<div class="message warn">Warning: ${msg}</div>`));
-      (validation.infos || []).forEach((msg) => messages.push(`<div class="message">Info: ${msg}</div>`));
-      if (validation.ok && boardPlan.validation && boardPlan.validation.ok && vVerify.ok) {
-        messages.unshift(`<div class="message ok">OK: Ready to generate ${boardPlan.boards.length} boards.</div>`);
-      }
-      document.getElementById("validationMessages").innerHTML = messages.join("") || `<div class="message">No validation output.</div>`;
-    }
-
-    function renderStructuralMode(pureParams) {
-      const mode = pureParams.structuralMode || {};
-      document.getElementById("structuralMode").innerHTML = `
-        <table>
-          <tr><td>Fridge HSet Mode</td><td>${mode.fridgeHSetMode || "-"}</td></tr>
-          <tr><td>Avoidance Raised</td><td>${mode.avoidanceRaised ? "Yes" : "No"}</td></tr>
-          <tr><td>Side Panel</td><td>${mode.sidePanelSide || "none"}</td></tr>
-          <tr><td>V5 Side</td><td>${mode.v5Side || "none"}</td></tr>
-        </table>`;
     }
 
     function escapeHtml(value) {
@@ -9284,34 +8552,6 @@
       },
     });
 
-    const fridgePresetManager = createPresetManager({
-      moduleKey: "fridge",
-      storageKey: "cabinetnc.fridge.presets.v2",
-      legacyKey: "cabinetnc.fridge.preset.v1",
-      uiPrefix: "fridgePreset",
-      statusLabel: "Fridge",
-      serialize() {
-        return {
-          version: 1,
-          module: "fridge",
-          savedAt: new Date().toISOString(),
-          controls: presetReadControls("fridgeParamsPanel"),
-          stack: stack.map((section) => ({ ...section })),
-          selectedZoneId: fridgeState.selectedZoneId,
-        };
-      },
-      apply(preset) {
-        presetApplyControls(preset.controls);
-        if (Array.isArray(preset.stack)) stack = preset.stack.map((section) => ({ ...section }));
-        fridgeState.selectedZoneId = preset.selectedZoneId || stack[0]?.id || null;
-        calculate();
-      },
-      defaultName() {
-        return document.getElementById("fridgeAssemblyName")?.value?.trim()
-          || `Fridge ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
-      },
-    });
-
     function createOverheadPresetManager(bench) {
       return createPresetManager({
         moduleKey: bench.presetKey,
@@ -9729,13 +8969,6 @@
     }
 
     function showModule(moduleName) {
-      if (moduleName === "fridge" && !SHOW_FRIDGE_MODULE) {
-        moduleName = "generalTall";
-        document.getElementById("statusText").textContent =
-          "Fridge module hidden — use General Tall zone type fridge (or Load fridge layout).";
-      }
-      const fridgeNav = document.getElementById("fridgeModuleNav");
-      if (fridgeNav) fridgeNav.hidden = !SHOW_FRIDGE_MODULE;
       activeModule = moduleName;
       document.getElementById("page-design").classList.toggle("overhead-mode", moduleName === "overhead");
       document.getElementById("page-design").classList.toggle("kitchen-mode", moduleName === "kitchen");
@@ -9744,12 +8977,7 @@
         item.classList.toggle("active", item.dataset.module === moduleName);
       });
       document.querySelectorAll("[data-module-panel]").forEach((panel) => {
-        const panelModule = panel.dataset.modulePanel;
-        if (panelModule === "fridge" && !SHOW_FRIDGE_MODULE) {
-          panel.hidden = true;
-          return;
-        }
-        panel.hidden = panelModule !== moduleName;
+        panel.hidden = panel.dataset.modulePanel !== moduleName;
       });
       if (moduleName === "generalTall") {
         hydrateGeneralTallPresetTextarea();
@@ -9798,104 +9026,15 @@
       }
       if (activeModule === "kitchen") {
         kitchenGeneratePreview();
-        return;
       }
-      const data = buildAll();
-      document.getElementById("resultBox").textContent = JSON.stringify({
-        pureParamsOk: data.pureParams.validation.ok,
-        boardCount: data.boardPlan.boards.length,
-        frontPanelCount: data.boardPlan.frontPanels?.length || 0,
-        vVerifyOk: data.vVerify.ok,
-      }, null, 2);
-      fusionSend("fridge.calculate", { params: data.pureParams });
     }
 
     function validate() {
-      if (activeModule === "lounge") {
-        loungeGenerateGeometry();
-        return;
-      }
-      if (activeModule === "generalTall") {
-        generalTallGenerate();
-        return;
-      }
-      if (activeModule === "overhead") {
-        overheadGenerate(overheadMainBench);
-        return;
-      }
-      if (activeModule === "kitchen") {
-        kitchenGeneratePreview();
-        return;
-      }
-      const data = buildAll();
-      fusionSend("fridge.validate", { params: data.pureParams, boardPlan: data.boardPlan, vVerify: data.vVerify });
-    }
-
-    function renderFridgeGenerateResult(parsed) {
-      const resultBox = document.getElementById("resultBox");
-      if (resultBox) resultBox.textContent = JSON.stringify(parsed, null, 2);
-      const created = Number(parsed?.createdBodies || 0);
-      const errors = Array.isArray(parsed?.errors) ? parsed.errors : [];
-      const warnings = Array.isArray(parsed?.warnings) ? parsed.warnings : [];
-      const failed = parsed?.finalStatus === "fail";
-      const step = parsed?.failedStep || "";
-      const messages = [];
-      if (failed) {
-        errors.forEach((msg) => messages.push(`<div class="message error">Error: ${escapeHtml(msg)}</div>`));
-        warnings.forEach((msg) => messages.push(`<div class="message warn">Warning: ${escapeHtml(msg)}</div>`));
-      } else {
-        messages.push(`<div class="message ok">OK: Created ${created} Fusion bodies.</div>`);
-        warnings.forEach((msg) => messages.push(`<div class="message warn">Warning: ${escapeHtml(msg)}</div>`));
-      }
-      const validationHost = document.getElementById("validationMessages");
-      if (validationHost && messages.length) validationHost.innerHTML = messages.join("");
-      const status = document.getElementById("statusText");
-      if (status) {
-        status.textContent = failed
-          ? `Fridge generate failed (${step || "error"})`
-          : `Fridge created ${created} bodies`;
-      }
+      calculate();
     }
 
     function generate() {
-      if (activeModule === "lounge") {
-        loungeGenerateGeometry();
-        return;
-      }
-      if (activeModule === "generalTall") {
-        generalTallGenerate();
-        return;
-      }
-      if (activeModule === "overhead") {
-        overheadGenerate(overheadMainBench);
-        return;
-      }
-      if (activeModule === "kitchen") {
-        kitchenGeneratePreview();
-        return;
-      }
-      try {
-        const data = buildAll();
-        document.getElementById("statusText").textContent = "Generating Fridge Fusion bodies...";
-        fusionSend("fridge.generate", {
-          type: "fridge.generate",
-          runId: String(Date.now()),
-          params: data.pureParams,
-          boardPlan: data.boardPlan,
-          vVerify: data.vVerify,
-          diagnosticsOnly: false,
-          previewMode: "assembly_3d",
-          ...generatorNamingPayload("fridge"),
-        });
-      } catch (error) {
-        const msg = error && error.message ? error.message : String(error);
-        document.getElementById("statusText").textContent = `Fridge generate failed: ${msg}`;
-        document.getElementById("resultBox").textContent = msg;
-        const validationHost = document.getElementById("validationMessages");
-        if (validationHost) {
-          validationHost.innerHTML = `<div class="message error">Error: ${escapeHtml(msg)}</div>`;
-        }
-      }
+      calculate();
     }
 
     function maybeShowPartDocumentNotice(parsed) {
@@ -10111,10 +9250,9 @@
             connectUiHandleExecuteResult(parsed);
           } else if (action === "panelAttributesResult") {
             attrHandleFusionResult(parsed);
-          } else if (action === "fridgeCabinetResult") {
-            renderFridgeGenerateResult(parsed);
           } else {
-            document.getElementById("resultBox").textContent = JSON.stringify(parsed, null, 2);
+            const status = document.getElementById("statusText");
+            if (status) status.textContent = `Python bridge: ${action}`;
           }
         } catch (error) {
           if (action === "generalTallResult") {
@@ -10135,20 +9273,14 @@
             document.getElementById("loungeResultBox").textContent = String(data || "");
           } else if (action === "loungeAssemblyBodyResult") {
             document.getElementById("loungeResultBox").textContent = String(data || "");
-          } else if (action === "fridgeCabinetResult") {
-            document.getElementById("resultBox").textContent = String(data || "");
-            document.getElementById("statusText").textContent = "Fridge generate response parse failed";
           } else {
-            document.getElementById("resultBox").textContent = String(data || "");
+            const status = document.getElementById("statusText");
+            if (status) status.textContent = `Python bridge parse failed: ${action}`;
           }
         }
       }
     };
 
-    document.getElementById("calculateBtn").addEventListener("click", calculate);
-    document.getElementById("validateBtn").addEventListener("click", validate);
-    document.getElementById("generateBtn").addEventListener("click", generate);
-    fridgePresetManager.bind();
     document.getElementById("gtGenerateBtn").addEventListener("click", generalTallGenerate);
     document.getElementById("gtLoadFridgeLayoutBtn").addEventListener("click", applyGeneralTallFridgeLayout);
     document.getElementById("gtCreateFusionBodiesBtn").addEventListener("click", generalTallCreateFusionRoughBodies);
@@ -11500,7 +10632,7 @@
       return payload;
     }
 
-    const GENERATOR_ORIGIN_PREFIXES = ["fridge", "gt", "oh", "aoh", "kitchen", "lounge"];
+    const GENERATOR_ORIGIN_PREFIXES = ["gt", "oh", "aoh", "kitchen", "lounge"];
 
     function attrApplyGenerationOriginToGenerators(layout) {
       const rect = layout && layout.generation;
@@ -13827,10 +12959,6 @@
 
       if (activeTopLevelPageId() !== "design") return false;
 
-      if (activeModule === "fridge") {
-        deleteSelectedFridgeZone();
-        return true;
-      }
       if (activeModule === "generalTall") {
         document.getElementById("gtDeleteZoneEditorBtn")?.click();
         return true;
@@ -15641,12 +14769,6 @@
     setTimeout(attrRequestThicknessRules, 900);
     setTimeout(attrRequestThicknessRules, 3100);
 
-    document.getElementById("addDrawer").addEventListener("click", () => {
-      const zone = { id: `zone_${Date.now()}`, type: "drawer", height: 250 };
-      stack.unshift(zone);
-      fridgeState.selectedZoneId = zone.id;
-      calculate();
-    });
     document.querySelectorAll(".attr-page-tab").forEach((tab) => {
       tab.addEventListener("click", () => {
         attrShowAttributesView(tab.dataset.attrView);
@@ -15674,21 +14796,6 @@
         showModule(moduleButton.dataset.module);
       });
     });
-    document.getElementById("fridgeWidth").addEventListener("input", () => {
-      syncCabinetWidthFromFridge();
-      calculate();
-    });
-    document.getElementById("cabinetWidth").addEventListener("input", () => {
-      syncFridgeWidthFromCabinet();
-      calculate();
-    });
-    document.querySelectorAll("#fridgeParamsPanel input, #fridgeParamsPanel select, #fridgeWorkspacePanel input, #fridgeWorkspacePanel select").forEach((el) => el.addEventListener("change", () => {
-      if (el.id === "fridgeHeight") syncFirstFridgeZoneHeight(el.value);
-      if (el.id === "fridgeWidth") syncCabinetWidthFromFridge();
-      if (el.id === "cabinetWidth") syncFridgeWidthFromCabinet();
-      if (el.id === "exteriorSide") syncCabinetWidthFromFridge();
-      calculate();
-    }));
     document.querySelectorAll("#generalTallParamsPanel input, #generalTallParamsPanel select").forEach((el) => el.addEventListener("change", () => {
       if (activeModule === "generalTall") {
         renderGeneralTallFrontEditor();
@@ -15718,7 +14825,6 @@
     hydrateGeneralTallPresetTextarea();
     renderGeneralTallZones();
     updateGeneralTallFusionButtonState(null);
-    syncCabinetWidthFromFridge();
     showModule("generalTall");
     calculate();
   </script>

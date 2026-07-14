@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lock cutout Connect smoke â€” host pocket + metadata writeback.
+"""Lock cutout Connect smoke â€?host pocket + metadata writeback.
 
 Install: python scripts/manage_fusion_smokes.py install --batch lock
 """
@@ -34,7 +34,6 @@ def _ensure_paths(plugin_dir: str) -> None:
         os.path.join(plugin_dir, "fusion"),
         os.path.join(plugin_dir, "ui"),
         os.path.join(plugin_dir, "modules"),
-        os.path.join(plugin_dir, "modules", "fridge"),
         os.path.join(plugin_dir, "modules", "general_tall"),
         os.path.join(plugin_dir, "modules", "overhead"),
         os.path.join(plugin_dir, "modules", "kitchen"),

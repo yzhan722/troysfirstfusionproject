@@ -12,7 +12,6 @@ if str(ROOT) not in sys.path:
 
 from generator_panel_adapter import (  # noqa: E402
     snapshot_dict_from_bbox_board,
-    snapshot_dict_from_fridge_board,
     snapshot_dict_from_lounge_panel,
 )
 from generator_relationship_cases import list_generator_relationship_scenarios  # noqa: E402
@@ -23,11 +22,11 @@ from generator_relationship_service import (  # noqa: E402
 
 
 class GeneratorRelationshipTests(unittest.TestCase):
-    def test_all_five_generators_have_scenarios(self):
+    def test_all_four_generators_have_scenarios(self):
         generators = {item["generator"] for item in list_generator_relationship_scenarios()}
         self.assertEqual(
             generators,
-            {"general_tall", "overhead", "fridge", "kitchen", "lounge"},
+            {"general_tall", "overhead", "kitchen", "lounge"},
         )
 
     def test_bbox_board_adapter_roundtrip(self):
@@ -57,21 +56,6 @@ class GeneratorRelationshipTests(unittest.TestCase):
         )
         self.assertEqual(payload["panelId"], "main_front")
         self.assertEqual(payload["bbox"]["y0"], 582)
-
-    def test_fridge_board_adapter_uses_assembly_origin(self):
-        payload = snapshot_dict_from_fridge_board(
-            {
-                "id": "B1",
-                "series": "B",
-                "profilePlane": "XZ",
-                "thickness": 16,
-                "outerVector": [[0, 0], [611, 0], [611, 53], [0, 53], [0, 0]],
-                "placement": {"assembly": {"originMm": {"x": 16, "y": 39, "z": 0}}},
-            }
-        )
-        self.assertEqual(payload["panelId"], "B1")
-        self.assertAlmostEqual(payload["bbox"]["x1"] - payload["bbox"]["x0"], 611)
-        self.assertAlmostEqual(payload["bbox"]["y1"] - payload["bbox"]["y0"], 16)
 
     def test_all_generator_scenarios_pass(self):
         report = evaluate_all_generator_relationship_scenarios()

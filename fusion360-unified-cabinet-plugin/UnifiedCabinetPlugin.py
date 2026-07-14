@@ -42,13 +42,11 @@ def _ensure_paths(plugin_dir):
         os.path.join(plugin_dir, "fusion"),
         os.path.join(plugin_dir, "ui"),
         os.path.join(plugin_dir, "modules"),
-        os.path.join(plugin_dir, "modules", "fridge"),
         os.path.join(plugin_dir, "modules", "general_tall"),
         os.path.join(plugin_dir, "modules", "overhead"),
         os.path.join(plugin_dir, "modules", "kitchen"),
         os.path.join(plugin_dir, "modules", "lounge"),
         os.path.join(plugin_dir, "modules", "tools"),
-        os.path.join(plugin_dir, "modules", "hardware"),
         os.path.join(plugin_dir, "modules", "hardware"),
         os.path.join(plugin_dir, "modules", "relationships"),
         os.path.join(plugin_dir, "panel_attributes"),
@@ -93,7 +91,6 @@ class UnifiedCabinetPluginApp:
         from adapter import FusionAdapter
         from palette_controller import PaletteController
 
-        fridge_module = importlib.reload(importlib.import_module("modules.fridge.controller"))
         general_tall_module = importlib.reload(importlib.import_module("modules.general_tall.controller"))
         overhead_module = importlib.reload(importlib.import_module("modules.overhead.controller"))
         kitchen_module = importlib.reload(importlib.import_module("modules.kitchen.controller"))
@@ -105,7 +102,6 @@ class UnifiedCabinetPluginApp:
         panel_attributes_module = importlib.reload(importlib.import_module("panel_attributes.controller"))
 
         self.fusion = FusionAdapter()
-        fridge = fridge_module.FridgeController(self.plugin_dir, self.fusion)
         gt_ctor = general_tall_module.GeneralTallController
         gt_arity = max(0, len(inspect.signature(gt_ctor.__init__).parameters) - 1)
         general_tall = gt_ctor(self.plugin_dir, self.fusion) if gt_arity >= 2 else gt_ctor(self.plugin_dir)
@@ -118,9 +114,6 @@ class UnifiedCabinetPluginApp:
         connect_demo = connect_demo_module.ConnectDemoController(self.plugin_dir, self.fusion, relationships, hardware)
         panel_attributes = panel_attributes_module.PanelAttributesController(self.fusion)
         routes = {
-            "fridge.calculate": fridge.calculate,
-            "fridge.validate": fridge.validate,
-            "fridge.generate": fridge.generate,
             "generalTall.generate": general_tall.generate,
             "generalTall.createFusionRoughBodies": general_tall.create_fusion_rough_bodies,
             "overhead.status": overhead.status,

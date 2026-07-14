@@ -907,7 +907,7 @@ Optional follow-up (not blocking M6):
   ✅ Lounge generator_declared offline (2026-07-13; L_SHAPE front→top/side)
   ✅ Fusion Play `--batch declared` (2026-07-13; Kitchen/GT/Lounge create→reconcile→preview)
   ✅ GT fridge user-path replaces Fridge UI (2026-07-14; Fridge tab hidden; Load fridge layout)
-  ❌ standalone Fridge module (hidden; code kept as oracle; not generator_declared)
+  ✅ Standalone Fridge module deleted (2026-07-14; recover from git `4bfe809`)
 ```
 
 ## Goal
@@ -1336,12 +1336,11 @@ Post-M9 scaffold hardware lane is complete.
 - **Fusion Play `--batch declared`:** sealed 2026-07-13 (Kitchen/GT/Lounge create→reconcile→preview screw; smoke removed after PASS).
 - **BRep face bounds v1.1:** Fusion faces use per-face edge-sample AABB (clamped to panel), not full panel bbox.
 - **Real-cabinet hardware offline:** all 5 types preview+cut-plan on Overhead BP↔D0 declared joint.
-- Remaining truth gaps: NC consumers of writeback (none yet). Fridge Cabinet UI is **hidden** — GT fridge zone is the user path (`docs/connect-gt-fridge-user-parity-checklist.md`).
+- Remaining truth gaps: NC consumers of writeback (none yet). Standalone Fridge module **deleted** (recover from git `4bfe809`; GT fridge zone is the user path).
 
 Next options:
-1. Fusion hand-check: GT「Load fridge layout」→ Generate → Create rough bodies
-2. Further face-bounds refinements (parametric loops) — M5 ceiling still deferred
-3. NC consumers of panel writeback (none yet)
+1. Further face-bounds refinements (parametric loops) — M5 ceiling still deferred
+2. NC consumers of panel writeback (none yet)
 
 Checklist: `docs/connect-batch-c-checklist.md` · `docs/connect-post-m9-hardware-type-ui-checklist.md` · `docs/connect-post-m9-scaffold-hardware-checklist.md` · `docs/connect-real-cabinet-hardware-checklist.md` · `docs/connect-m5-face-verification-checklist.md`
 

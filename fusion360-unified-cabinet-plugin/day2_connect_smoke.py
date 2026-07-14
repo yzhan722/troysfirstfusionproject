@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Day 2 Connect smoke â€” preview screw holes + full cut pipeline.
+"""Day 2 Connect smoke â€?preview screw holes + full cut pipeline.
 
-Run from Fusion Scripts and Add-ins (Scripts tab, â–¶ play):
+Run from Fusion Scripts and Add-ins (Scripts tab, â–?play):
   day2_connect_smoke.py
 
 Or install via: scripts/install_fusion_connect_smokes.ps1
@@ -31,13 +31,12 @@ def _resolve_plugin_dir(script_file: str) -> str:
 
 
 def _ensure_paths(plugin_dir: str) -> None:
-    # Keep in sync with UnifiedCabinetPlugin._ensure_paths (flat imports under fusion/metadata/â€¦).
+    # Keep in sync with UnifiedCabinetPlugin._ensure_paths (flat imports under fusion/metadata/â€?.
     for path in (
         plugin_dir,
         os.path.join(plugin_dir, "fusion"),
         os.path.join(plugin_dir, "ui"),
         os.path.join(plugin_dir, "modules"),
-        os.path.join(plugin_dir, "modules", "fridge"),
         os.path.join(plugin_dir, "modules", "general_tall"),
         os.path.join(plugin_dir, "modules", "overhead"),
         os.path.join(plugin_dir, "modules", "kitchen"),

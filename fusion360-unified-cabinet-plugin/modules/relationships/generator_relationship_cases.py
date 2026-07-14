@@ -79,45 +79,6 @@ GENERATOR_RELATIONSHIP_SCENARIOS: List[Dict[str, Any]] = [
         ],
     },
     {
-        "scenarioId": "fridge_base",
-        "generator": "fridge",
-        "paramsFixture": "fridge_base.json",
-        "minPanelCount": 25,
-        "minNonNoneRelationships": 80,
-        "pairs": [
-            {
-                "caseId": "fr_b1_b2_bottom_rail_stack",
-                "panelAId": "B1",
-                "panelBId": "B2",
-                "expectedGeometryType": "surface_to_surface",
-            },
-            {
-                "caseId": "fr_b1_b3_bottom_rail_to_deck",
-                "panelAId": "B1",
-                "panelBId": "B3",
-                "expectedGeometryType": "edge_to_surface",
-            },
-            {
-                "caseId": "fr_b2_b3_rail_to_deck",
-                "panelAId": "B2",
-                "panelBId": "B3",
-                "expectedGeometryType": "edge_to_surface",
-            },
-            {
-                "caseId": "fr_avoidance_front_top",
-                "panelAId": "AvoidanceFront",
-                "panelBId": "AvoidanceTop",
-                "expectedGeometryType": "edge_to_surface",
-            },
-            {
-                "caseId": "fr_t1_t2_top_rail_stack",
-                "panelAId": "T1",
-                "panelBId": "T2",
-                "expectedGeometryType": "surface_to_surface",
-            },
-        ],
-    },
-    {
         "scenarioId": "kitchen_base",
         "generator": "kitchen",
         "paramsFixture": "kitchen_base.json",

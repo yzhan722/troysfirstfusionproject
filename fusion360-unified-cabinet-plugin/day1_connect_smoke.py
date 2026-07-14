@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Day 1 Connect smoke â€” optional standalone Fusion Script entry point.
+"""Day 1 Connect smoke â€?optional standalone Fusion Script entry point.
 
-Run from Fusion: Scripts and Add-Ins â†’ Scripts â†’ run this file.
+Run from Fusion: Scripts and Add-Ins â†?Scripts â†?run this file.
 (The Connect palette no longer hosts a Day 1 Dev Tools button.)
 """
 
@@ -29,13 +29,12 @@ def _resolve_plugin_dir(script_file: str) -> str:
 
 
 def _ensure_paths(plugin_dir: str) -> None:
-    # Keep in sync with UnifiedCabinetPlugin._ensure_paths (flat imports under fusion/metadata/â€¦).
+    # Keep in sync with UnifiedCabinetPlugin._ensure_paths (flat imports under fusion/metadata/â€?.
     for path in (
         plugin_dir,
         os.path.join(plugin_dir, "fusion"),
         os.path.join(plugin_dir, "ui"),
         os.path.join(plugin_dir, "modules"),
-        os.path.join(plugin_dir, "modules", "fridge"),
         os.path.join(plugin_dir, "modules", "general_tall"),
         os.path.join(plugin_dir, "modules", "overhead"),
         os.path.join(plugin_dir, "modules", "kitchen"),

@@ -20,11 +20,8 @@ def _run_generator_scenario(scenario: Dict[str, Any]) -> Dict[str, Any]:
 
     params_fixture = scenario.get("paramsFixture")
     params = load_params_fixture(str(params_fixture)) if params_fixture else None
-    if generator == "fridge":
-        bridge_result = runner(params)
-    else:
-        payload = params.get("params") if isinstance(params, dict) and isinstance(params.get("params"), dict) else params
-        bridge_result = runner(payload)
+    payload = params.get("params") if isinstance(params, dict) and isinstance(params.get("params"), dict) else params
+    bridge_result = runner(payload)
 
     snapshot_dicts = snapshots_from_generator_result(generator, bridge_result)
     snapshots = [build_panel_snapshot_from_dict(item) for item in snapshot_dicts]

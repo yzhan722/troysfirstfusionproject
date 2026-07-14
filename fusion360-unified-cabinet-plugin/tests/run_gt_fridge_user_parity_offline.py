@@ -70,18 +70,17 @@ def main() -> int:
 
     palette = open(os.path.join(ROOT, "palette.html"), encoding="utf-8").read()
     for token in (
-        "SHOW_FRIDGE_MODULE",
         "applyGeneralTallFridgeLayout",
         "gtLoadFridgeLayoutBtn",
         'activeModule = "generalTall"',
     ):
         if token not in palette:
             return _fail("palette cutover missing", token)
-    if 'data-module="fridge"' in palette and "SHOW_FRIDGE_MODULE" in palette:
-        # Fridge nav must be gated; raw always-visible active fridge tab is a fail.
-        if 'class="module active" data-module="fridge"' in palette:
-            return _fail("fridge still default active module", "palette nav")
-    print("[PASS] palette hides Fridge + fridge layout button")
+    if "FridgeCabinetLogic" in palette or "fridge_logic.js" in palette:
+        return _fail("standalone Fridge still in palette", "FridgeCabinetLogic/fridge_logic.js")
+    if 'data-module="fridge"' in palette:
+        return _fail("standalone Fridge nav still present", "data-module=fridge")
+    print("[PASS] palette GT fridge path; standalone Fridge removed")
 
     test = subprocess.run(
         ["node", "--experimental-strip-types", "fridgeZone.test.ts"],

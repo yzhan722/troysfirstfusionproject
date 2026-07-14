@@ -87,14 +87,17 @@ def main() -> int:
         "applianceWidthMm",
         "exteriorSide",
         "generalTallApplyFridgeExteriorToForm",
-        "SHOW_FRIDGE_MODULE",
         "applyGeneralTallFridgeLayout",
         "gtLoadFridgeLayoutBtn",
         '"fridge"',
     ):
         if token not in palette:
             return _fail("palette missing", token)
-    print("[PASS] palette GT fridge controls + Fridge UI hide")
+    if "FridgeCabinetLogic" in palette or "fridge_logic.js" in palette:
+        return _fail("standalone Fridge still in palette", "FridgeCabinetLogic/fridge_logic.js")
+    if 'data-module="fridge"' in palette:
+        return _fail("standalone Fridge nav still present", "data-module=fridge")
+    print("[PASS] palette GT fridge controls; standalone Fridge removed")
 
     test = subprocess.run(
         ["node", "--experimental-strip-types", "fridgeZone.test.ts"],

@@ -80,37 +80,9 @@ def run_lounge(params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return data.get("result") or {}
 
 
-def run_fridge(params_fixture: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    fixture = params_fixture if params_fixture is not None else load_params_fixture("fridge_base.json")
-    ui = fixture.get("ui") if isinstance(fixture.get("ui"), dict) else fixture
-    logic_path = str(REPO_ROOT / "Fridge Cabinet Generator" / "fridge_logic.js").replace("\\", "/")
-    pure_params_script = (
-        "const logic=require(%r);"
-        "const ui=%s;"
-        "process.stdout.write(JSON.stringify(logic.buildPureParams(ui)));"
-    ) % (logic_path, json.dumps(ui))
-    proc = subprocess.run(
-        ["node", "-e", pure_params_script],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        cwd=str(REPO_ROOT),
-    )
-    if proc.returncode:
-        raise RuntimeError((proc.stderr or proc.stdout or "fridge buildPureParams failed").strip())
-    pure_params = json.loads(proc.stdout or "{}")
-    return _run_node(
-        PLUGIN_ROOT / "scripts" / "boardplan_from_pureparams.js",
-        pure_params,
-        PLUGIN_ROOT,
-    )
-
-
 GENERATOR_RUNNERS = {
     "general_tall": run_general_tall,
     "overhead": run_overhead,
     "kitchen": run_kitchen,
     "lounge": run_lounge,
-    "fridge": run_fridge,
 }
