@@ -24,6 +24,15 @@
   const DEFAULT_HINGE_CUP_DIAMETER_MM = 35;
   const DEFAULT_HINGE_CUP_DEPTH_MM = 12.5;
   const DEFAULT_HINGE_CUP_CENTER_FROM_EDGE_MM = 22.5;
+  /** LED T-slot on Style-1 insert boards (B3/T3) — matches General Tall. */
+  const LED_GROOVE_WIDTH_MM = 14.5;
+  const LED_GROOVE_DEPTH_MM = 6.5;
+  /** Clear strip from board front edge to near wall of main channel. */
+  const LED_GROOVE_FRONT_LAND_MM = 18;
+  /** Centerline from front = land + half groove width (25.25). */
+  const LED_GROOVE_FRONT_OFFSET_MM = LED_GROOVE_FRONT_LAND_MM + LED_GROOVE_WIDTH_MM / 2;
+  const LED_GROOVE_BRANCH_END_INSET_MM = 80;
+  const LED_GROOVE_BOARD_DEPTH_MM = 150;
   const LOCK_PRESETS = {
     razor_long_rounded_1: {
       id: "razor_long_rounded_1",
@@ -147,6 +156,7 @@
       fridgeH: ui.fridge.height,
       topClearance: ui.clearances.top,
       bottomClearance: ui.clearances.bottom,
+      ledGroove: ui.clearances.ledGroove !== false,
       avoidanceEnabled: ui.wheelAvoidance.enabled,
       avoidanceH: ui.wheelAvoidance.enabled ? ui.wheelAvoidance.height : 0,
       avoidanceD: ui.wheelAvoidance.enabled ? ui.wheelAvoidance.depth : 0,
@@ -1197,6 +1207,52 @@
       [CW - 16, 0],
       [16, 0],
     ];
+  }
+
+  /**
+   * LED T-slot path in board-local XY (front = y0 / doors).
+   * Main channel: 18 mm land from front (centerline 25.25 mm); T-branches run to the back edge.
+   */
+  function buildInsertBoardLedGroove(boardWidthMm, face) {
+    const width = Number(boardWidthMm);
+    const half = LED_GROOVE_WIDTH_MM / 2;
+    if (!(width > LED_GROOVE_BRANCH_END_INSET_MM * 2 + LED_GROOVE_WIDTH_MM)) {
+      return null;
+    }
+    const mainYCenter = LED_GROOVE_FRONT_OFFSET_MM;
+    const main = {
+      x0: 0,
+      x1: width,
+      y0: mainYCenter - half,
+      y1: mainYCenter + half,
+    };
+    const branchY0 = main.y1;
+    const branchY1 = LED_GROOVE_BOARD_DEPTH_MM;
+    const branchLength = branchY1 - branchY0;
+    if (!(branchLength > 0)) return null;
+    const branches = [
+      LED_GROOVE_BRANCH_END_INSET_MM,
+      width - LED_GROOVE_BRANCH_END_INSET_MM,
+    ].map((centerX) => ({
+      x0: centerX - half,
+      x1: centerX + half,
+      y0: branchY0,
+      y1: branchY1,
+    }));
+    return {
+      type: face === "top" ? "t3_groove" : "b3_groove",
+      face: face === "top" ? "top" : "bottom",
+      width: LED_GROOVE_WIDTH_MM,
+      depth: LED_GROOVE_DEPTH_MM,
+      frontOffset: LED_GROOVE_FRONT_OFFSET_MM,
+      branchCount: branches.length,
+      branchLength,
+      branchWidth: LED_GROOVE_WIDTH_MM,
+      branchEndInset: LED_GROOVE_BRANCH_END_INSET_MM,
+      main,
+      branches,
+      note: "LED T-slot: 18 mm front land (centerline 25.25), branches to rear edge; cut isolated to this board only.",
+    };
   }
 
   /** Local YZ: Y+ front→rear, Z+ bottom→top; depthY 150; rear Zi slots at Y 100–150. */
@@ -2566,6 +2622,7 @@
     const topRailHeightMm = endClearances.topH;
 
     const t3Profile = t3B3OuterVector(psw);
+    const ledGrooveEnabled = base.ledGroove !== false;
 
     if (wm.hasSidePanel === true) {
       const avoidD = avoidance.enabled === true && avoidance.finalDepth != null ? Number(avoidance.finalDepth) : 0;
@@ -2678,18 +2735,16 @@
           [psw - 8, 140],
         ],
       },
-      grooves: [
-        {
-          type: "connected_bottom_groove",
-          mainWidth: 14.5,
-          depth: 6.5,
-          branchLength: 20,
-          note: "placeholder groove definition; exact path can be refined later",
-        },
-      ],
+      grooves: (() => {
+        if (!ledGrooveEnabled) return [];
+        const led = buildInsertBoardLedGroove(psw, "bottom");
+        return led ? [led] : [];
+      })(),
       source: { series: "B", board: "B3" },
       placement: { series: "B", id: "B3", region: "cabinet_bottom" },
-      notes: "B3 shares T3/B3 inserted profile (BoardPlan v0.2).",
+      notes: ledGrooveEnabled
+        ? "B3 shares T3/B3 inserted profile (BoardPlan v0.2). LED groove on bottom face."
+        : "B3 shares T3/B3 inserted profile (BoardPlan v0.2).",
     });
 
     for (const zi of layout.ziList || []) {
@@ -3075,10 +3130,16 @@
           [psw - 8, 125],
         ],
       },
-      grooves: [],
+      grooves: (() => {
+        if (!ledGrooveEnabled) return [];
+        const led = buildInsertBoardLedGroove(psw, "top");
+        return led ? [led] : [];
+      })(),
       source: { series: "T", board: "T3" },
       placement: { series: "T", id: "T3", region: "cabinet_top" },
-      notes: "T3 inserted board profile shared with B3 (BoardPlan v0.2).",
+      notes: ledGrooveEnabled
+        ? "T3 inserted board profile shared with B3 (BoardPlan v0.2). LED groove on top face."
+        : "T3 inserted board profile shared with B3 (BoardPlan v0.2).",
     });
     boards.push({
       id: "T4",

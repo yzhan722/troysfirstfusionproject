@@ -29,6 +29,8 @@ export interface OverheadCabinetParams {
   cabinetWidth: number;
   cabinetDepth: number;
   cabinetHeight?: number;
+  /** T3 top-face LED T-groove (opens upward). Default on when omitted. */
+  ledGroove?: boolean;
   topClearanceHeight?: number;
   frontPanelThickness?: number;
   clearance?: number;
