@@ -25,7 +25,9 @@ OUTPUT_MARKER_VALUE = "nestingOutput"
 INSTANCE_ROLE_NAME = "instanceRole"
 INSTANCE_ROLE_NESTED = "nested"
 WORKPIECE_GROUP = "UnifiedCabinet.NestingWorkpiece"
+WORKPIECE_MANIFEST_NAME = "workpieceManifest"
 LAYOUT_COMPONENT_NAME = "NESTING_LAYOUT"
+SHEET_BOUNDARY_SKETCH_NAME = "NESTING_SHEETS"
 
 
 class UnsafeNestingLayoutError(RuntimeError):
@@ -308,6 +310,40 @@ def _registry_role(face, metadata):
         if token and str(entry.get("entityToken") or "") == token:
             return str(entry.get("millingSurface") or "").upper()
     return ""
+
+
+def _draw_sheet_boundaries(component, sheets):
+    """One lightweight sketch makes physical stock sheets visible in Fusion."""
+    if not sheets:
+        return 0
+    try:
+        sketch = component.sketches.add(component.xYConstructionPlane)
+        sketch.name = SHEET_BOUNDARY_SKETCH_NAME
+        lines = sketch.sketchCurves.sketchLines
+        count = 0
+        for sheet in sheets:
+            x0 = float(sheet.get("originX") or 0.0) / 10.0
+            y0 = float(sheet.get("originY") or 0.0) / 10.0
+            x1 = x0 + float(sheet.get("widthMm") or 0.0) / 10.0
+            y1 = y0 + float(sheet.get("heightMm") or 0.0) / 10.0
+            if x1 <= x0 or y1 <= y0:
+                continue
+            points = [
+                adsk.core.Point3D.create(x0, y0, 0.0),
+                adsk.core.Point3D.create(x1, y0, 0.0),
+                adsk.core.Point3D.create(x1, y1, 0.0),
+                adsk.core.Point3D.create(x0, y1, 0.0),
+            ]
+            for index in range(4):
+                line = lines.addByTwoPoints(points[index], points[(index + 1) % 4])
+                try:
+                    line.isConstruction = True
+                except Exception:
+                    pass
+            count += 1
+        return count
+    except Exception:
+        return 0
 
 
 def _fast_broad_faces(body):
@@ -620,12 +656,9 @@ def _strip_panel_attributes(body):
 
 def _mark_workpiece(body, placement, run_id):
     _strip_panel_attributes(body)
-    _set_attr(
-        body,
-        OUTPUT_MARKER_GROUP,
-        INSTANCE_ROLE_NAME,
-        INSTANCE_ROLE_NESTED,
-    )
+    # One body marker keeps scanner/selection compatibility. Per-body placement
+    # metadata lives once on the layout component to avoid 600+ Fusion attribute
+    # writes on a 200-panel nest.
     _set_attr(
         body,
         OUTPUT_MARKER_GROUP,
@@ -643,9 +676,7 @@ def _mark_workpiece(body, placement, run_id):
         "sheetIndex": placement.get("sheetIndex"),
         "rotationDeg": placement.get("rotationDeg"),
     }
-    # One JSON + runId only — extra scalar attrs froze 200+ creates.
-    _set_attr(body, WORKPIECE_GROUP, "metadata", json.dumps(details))
-    _set_attr(body, WORKPIECE_GROUP, "runId", run_id)
+    return details
 
 
 def create_layout(
@@ -658,6 +689,7 @@ def create_layout(
     layout=None,
     sheet_params=None,
     wait_callback=None,
+    prevalidated_validation=None,
 ):
     """Replace prior output and create one marked root-level layout component.
 
@@ -728,11 +760,15 @@ def create_layout(
         )
 
     if sheet_params is not None:
-        validation = collision_validate.validate_layout(
-            layout, prepared_items, sheet_params
+        validation = (
+            dict(prevalidated_validation)
+            if isinstance(prevalidated_validation, dict)
+            else None
         )
-        # Exact Fusion checks are expensive on large nests; skip above 80 parts.
-        if len(prepared_items) < 80:
+        if validation is None:
+            validation = collision_validate.validate_layout(
+                layout, prepared_items, sheet_params
+            )
             validation = collision_validate.validate_fusion_exact(
                 layout, prepared_items, sheet_params, validation
             )
@@ -765,6 +801,7 @@ def create_layout(
     temp_manager = adsk.fusion.TemporaryBRepManager.get()
     created = []
     pending_marks = []
+    workpiece_manifest = {}
     placements = list(layout.get("placements") or [])
     # Batch finishEdit — one base feature with 200+ bodies freezes Fusion for minutes.
     CREATE_BATCH = 40
@@ -843,7 +880,8 @@ def create_layout(
         profiler.begin("markWorkpieces")
         profiler.mark("markBegin", count=len(pending_marks))
     for mark_index, (new_body, placement) in enumerate(pending_marks):
-        _mark_workpiece(new_body, placement, run_id)
+        details = _mark_workpiece(new_body, placement, run_id)
+        workpiece_manifest[str(new_body.name or "")] = details
         created.append(
             {
                 "bodyName": new_body.name,
@@ -861,6 +899,22 @@ def create_layout(
             if profiler is not None:
                 profiler.mark("markProgress", marked=mark_index + 1)
             _pump()
+    _set_attr(
+        component,
+        WORKPIECE_GROUP,
+        WORKPIECE_MANIFEST_NAME,
+        json.dumps(
+            {
+                "version": 1,
+                "runId": run_id,
+                "workpieces": workpiece_manifest,
+            },
+            separators=(",", ":"),
+        ),
+    )
+    sheet_boundary_count = _draw_sheet_boundaries(
+        component, layout.get("sheets") or []
+    )
     if profiler is not None:
         profiler.end("markWorkpieces")
 
@@ -889,4 +943,5 @@ def create_layout(
         "requiredDepthMm": layout["requiredDepthMm"],
         "borderMm": layout.get("borderMm"),
         "spacingMm": layout.get("spacingMm"),
+        "sheetBoundaryCount": sheet_boundary_count,
     }

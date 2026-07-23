@@ -5,6 +5,7 @@ Looks at the live ``NESTING_LAYOUT`` component only (does not re-run nesting).
 
 from __future__ import annotations
 
+import json
 import os
 
 try:
@@ -22,6 +23,7 @@ try:
         OUTPUT_MARKER_NAME,
         OUTPUT_MARKER_VALUE,
         WORKPIECE_GROUP,
+        WORKPIECE_MANIFEST_NAME,
         _attr,
     )
 except Exception:
@@ -33,6 +35,7 @@ except Exception:
         OUTPUT_MARKER_NAME,
         OUTPUT_MARKER_VALUE,
         WORKPIECE_GROUP,
+        WORKPIECE_MANIFEST_NAME,
         _attr,
     )
 
@@ -94,6 +97,18 @@ def _transform_ring_mm(points, matrix):
     return [_matrix_transform_xy_mm(p[0], p[1], matrix) for p in (points or [])]
 
 
+def _workpiece_manifest(component):
+    raw = _attr(component, WORKPIECE_GROUP, WORKPIECE_MANIFEST_NAME)
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return {}
+    records = payload.get("workpieces") if isinstance(payload, dict) else None
+    return records if isinstance(records, dict) else {}
+
+
 def collect_layout_polylines(root_component, apply_occurrence_transform=True):
     """Collect XY millimetre polylines from the current nesting layout."""
     occurrence = find_nesting_layout_occurrence(root_component)
@@ -118,6 +133,7 @@ def collect_layout_polylines(root_component, apply_occurrence_transform=True):
         }
     polylines = []
     bodies = []
+    manifest = _workpiece_manifest(component)
     try:
         body_count = component.bRepBodies.count
     except Exception:
@@ -141,11 +157,22 @@ def collect_layout_polylines(root_component, apply_occurrence_transform=True):
                 polylines.append(points)
                 body_rings += 1
         if body_rings:
+            body_name = str(getattr(body, "name", "") or "")
+            details = manifest.get(body_name) if isinstance(manifest.get(body_name), dict) else {}
+            legacy = {}
+            raw_legacy = _attr(body, WORKPIECE_GROUP, "metadata")
+            if raw_legacy:
+                try:
+                    legacy = json.loads(raw_legacy)
+                except Exception:
+                    legacy = {}
             bodies.append(
                 {
-                    "bodyName": str(getattr(body, "name", "") or ""),
-                    "sheetIndex": _attr(body, WORKPIECE_GROUP, "sheetIndex"),
-                    "sourcePanelId": _attr(body, WORKPIECE_GROUP, "sourcePanelId"),
+                    "bodyName": body_name,
+                    "sheetIndex": details.get("sheetIndex", legacy.get("sheetIndex")),
+                    "sourcePanelId": details.get(
+                        "sourcePanelId", legacy.get("sourcePanelId", "")
+                    ),
                     "ringCount": body_rings,
                 }
             )

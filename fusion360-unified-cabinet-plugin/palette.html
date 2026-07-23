@@ -1892,9 +1892,12 @@
                 <option value="style_2">style_2</option>
               </select>
             </label>
-            <div class="grid2">
+            <div class="grid2" id="gtTopStyle1Options">
               <label>Style 1 front rail height <input id="gtTopStyle1FrontRailHeight" type="number" value="40"></label>
               <label>Style 1 insert slot thickness <input id="gtTopStyle1InsertSlotThickness" type="number" value="16" step="0.1"></label>
+              <label style="grid-column:1/-1;"><span><input id="gtTopStyle1LedGroove" type="checkbox" checked style="width:auto"> LED groove on T3 (Style 1)</span></label>
+            </div>
+            <div class="grid2" id="gtTopStyle2Options" hidden>
               <label>Style 2 height <input id="gtTopStyle2Height" type="number" value="80"></label>
             </div>
           </div>
@@ -1909,9 +1912,12 @@
                 <option value="style_2" selected>style_2</option>
               </select>
             </label>
-            <div class="grid2">
+            <div class="grid2" id="gtBottomStyle1Options" hidden>
               <label>Style 1 front rail height <input id="gtBottomStyle1FrontRailHeight" type="number" value="53"></label>
               <label>Style 1 insert slot thickness <input id="gtBottomStyle1InsertSlotThickness" type="number" value="16" step="0.1"></label>
+              <label style="grid-column:1/-1;"><span><input id="gtBottomStyle1LedGroove" type="checkbox" checked style="width:auto"> LED groove on B3 (Style 1)</span></label>
+            </div>
+            <div class="grid2" id="gtBottomStyle2Options">
               <label>Style 2 height <input id="gtBottomStyle2Height" type="number" value="100"></label>
             </div>
           </div>
@@ -1942,6 +1948,9 @@
                   <option value="style_1" selected data-i18n="kitchen.style1">样式 1</option>
                   <option value="style_2" data-i18n="kitchen.style2">样式 2</option>
                 </select>
+              </label>
+              <label id="ohStyle1LedGrooveWrap" style="grid-column:1/-1;">
+                <span><input id="ohStyle1LedGroove" type="checkbox" checked style="width:auto"> LED groove on T3 (top face, opens up)</span>
               </label>
               <label><span data-i18n="oh.width">柜体总宽度 (mm)</span> <input id="ohCabinetWidth" type="number" value="2000"></label>
               <label><span data-i18n="oh.depth">柜体深度 (mm)</span> <input id="ohCabinetDepth" type="number" value="400"></label>
@@ -1976,6 +1985,9 @@
                   <option value="style_1" selected data-i18n="kitchen.style1">样式 1</option>
                   <option value="style_2" data-i18n="kitchen.style2">样式 2</option>
                 </select>
+              </label>
+              <label id="kitchenBottomStyle1LedGrooveWrap" style="grid-column:1/-1;">
+                <span><input id="kitchenBottomStyle1LedGroove" type="checkbox" checked style="width:auto"> LED groove on B3 (Style 1)</span>
               </label>
               <label><span data-i18n="kitchen.lockEnabled">锁具</span>
                 <select id="kitchenLockEnabled">
@@ -3514,6 +3526,9 @@
                   <option value="style_2" data-i18n="kitchen.style2">样式 2</option>
                 </select>
               </label>
+              <label id="aohStyle1LedGrooveWrap" style="grid-column:1/-1;">
+                <span><input id="aohStyle1LedGroove" type="checkbox" checked style="width:auto"> LED groove on T3 (top face, opens up)</span>
+              </label>
               <label><span data-i18n="oh.width">柜体总宽度 (mm)</span> <input id="aohCabinetWidth" type="number" value="2000"></label>
               <label><span data-i18n="oh.depth">柜体深度 (mm)</span> <input id="aohCabinetDepth" type="number" value="400"></label>
               <label><span data-i18n="oh.height">柜体高度 (mm)</span> <input id="aohCabinetHeight" type="number" value="400"></label>
@@ -3658,7 +3673,18 @@
         <div class="card">
           <h3>Arrange Ready Panels in Nesting Zone / 分组排列</h3>
           <div class="card-body">
-            <div class="attr-section-note">Step 2: copies Nesting Ready panels using cached outlines + <strong>sheet_pack_poly_v2</strong> (BLF + short local search). Optional <strong>Deepnest</strong> only for small jobs (&le;60 parts). Sheet size / border / spacing / rotation come from <strong>Sheet Parameters</strong> below. Previous layout is preserved if validation fails.</div>
+            <div class="attr-section-note">Step 2: copies Nesting Ready panels using the fast built-in hybrid (MaxRects shortlist + true-shape checks). Optional Sparrow quality mode uses a separately packaged native bridge and safely falls back when unavailable. Previous layout is preserved if validation fails.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+              <label style="font-size:12px;">Nesting engine
+                <select id="nestingEngineMode" style="width:100%;">
+                  <option value="sheet_pack">Fast Hybrid (built-in)</option>
+                  <option value="sparrow">Quality (Sparrow native)</option>
+                </select>
+              </label>
+              <label style="font-size:12px;">Quality time limit (seconds)
+                <input type="number" id="nestingQualityTimeLimitSec" value="30" min="1" max="600" step="1" style="width:100%;">
+              </label>
+            </div>
             <div class="actions" style="margin-top:10px;">
               <button type="button" class="primary" id="nestingCreateLayoutBtn">Create / Replace Nesting Zone Layout</button>
               <button type="button" class="ghost" id="nestingCreateSketchBtn">Create Nesting Sketch / 生成投影草图</button>
@@ -3910,6 +3936,7 @@
         lockPresetId: "razor_long_rounded_1",
         bottomClearanceHeight: 55,
         bottomClearanceStyle: "style_1",
+        ledGroove: true,
       },
       columns: [
         { id: "k-col-1", width: 444, columnType: "left_door", zones: [
@@ -4133,10 +4160,23 @@
       });
       const style = document.getElementById("kitchenBottomClearanceStyle");
       if (style) style.value = settings.bottomClearanceStyle || "style_1";
+      const ledGroove = document.getElementById("kitchenBottomStyle1LedGroove");
+      if (ledGroove) ledGroove.checked = settings.ledGroove !== false;
+      kitchenSyncBottomStyle1LedVisibility();
       const lockEnabled = document.getElementById("kitchenLockEnabled");
       if (lockEnabled) lockEnabled.value = settings.lockEnabled === false ? "false" : "true";
       const lockPreset = document.getElementById("kitchenLockPreset");
       if (lockPreset) lockPreset.value = settings.lockPresetId || "razor_long_rounded_1";
+    }
+
+    function kitchenSyncBottomStyle1LedVisibility() {
+      const style = document.getElementById("kitchenBottomClearanceStyle")?.value
+        || kitchenState.globalSettings.bottomClearanceStyle
+        || "style_1";
+      const wrap = document.getElementById("kitchenBottomStyle1LedGrooveWrap");
+      if (wrap) wrap.hidden = style !== "style_1";
+      const propWrap = document.getElementById("kitchenPropBottomLedGrooveWrap");
+      if (propWrap) propWrap.hidden = style !== "style_1";
     }
 
     function kitchenReadGlobalInputs() {
@@ -4148,6 +4188,7 @@
       kitchenState.globalSettings.frontClearance = generalTallNumberValue("kitchenFrontClearance");
       kitchenState.globalSettings.bottomClearanceHeight = generalTallNumberValue("kitchenBottomClearanceHeight");
       kitchenState.globalSettings.bottomClearanceStyle = document.getElementById("kitchenBottomClearanceStyle").value;
+      kitchenState.globalSettings.ledGroove = document.getElementById("kitchenBottomStyle1LedGroove")?.checked !== false;
       kitchenState.globalSettings.lockEnabled = document.getElementById("kitchenLockEnabled").value === "true";
       kitchenState.globalSettings.lockPresetId = document.getElementById("kitchenLockPreset").value;
     }
@@ -4598,6 +4639,14 @@
         verticalLegWidth: 100,
         horizontalLegWidth: 100,
         thickness: ppt,
+        placement: {
+          x0: mainVisibleBounds.x0,
+          x1: mainVisibleBounds.x0 + ppt,
+          y0: ppt,
+          y1: state.mainDepth,
+          z0: 0,
+          z1: panelH,
+        },
         outer: lSupportOuter(state.mainDepth - ppt, panelH),
       });
       pushPanel({
@@ -4609,8 +4658,16 @@
         verticalLegWidth: 100,
         horizontalLegWidth: 100,
         thickness: ppt,
-        outer: lSupportOuter(state.mainDepth - ppt, panelH),
         mirrored: true,
+        placement: {
+          x0: mainVisibleBounds.x1 - ppt,
+          x1: mainVisibleBounds.x1,
+          y0: ppt,
+          y1: state.mainDepth,
+          z0: 0,
+          z1: panelH,
+        },
+        outer: lSupportOuter(state.mainDepth - ppt, panelH),
       });
       pushPanel({
         id: "l_front",
@@ -5014,15 +5071,12 @@
       const props = document.getElementById("loungePropertiesPanel");
       const resultBox = document.getElementById("loungeResultBox");
       if (!host || !summary || !props || !resultBox) return;
-      // Top view is drawn with the user-facing left/right orientation, which is the
-      // X-mirror of the internal geometry orientation. Mirroring lPosition here keeps
-      // every rect/opening/handle in a normal (non-mirrored) coordinate mapping.
-      const viewState = { ...state, lPosition: state.lPosition === "LEFT" ? "RIGHT" : "LEFT" };
+      // Top view must match Fusion assembly axes (no left/right mirror).
       const bounds = {
         main: { x0: 0, x1: state.mainWidth, y0: 0, y1: state.mainDepth },
-        mainVisible: loungeMainVisibleBounds(viewState),
-        l: loungeLBounds(viewState),
-        lVisible: loungeLVisibleBounds(viewState),
+        mainVisible: loungeMainVisibleBounds(state),
+        l: loungeLBounds(state),
+        lVisible: loungeLVisibleBounds(state),
       };
       const maxX = Math.max(state.mainWidth, bounds.l.x1);
       const maxY = Math.max(state.mainDepth, state.lDepth);
@@ -5058,9 +5112,9 @@
       const handle = (hx, hy, hw, hh, kind, cursor, lineX1, lineY1, lineX2, lineY2) => `
         <line x1="${lineX1}" y1="${lineY1}" x2="${lineX2}" y2="${lineY2}" stroke="#0f6bff" stroke-width="2" opacity="0.45" pointer-events="none"></line>
         <rect x="${hx}" y="${hy}" width="${hw}" height="${hh}" fill="transparent" style="cursor:${cursor};pointer-events:all" data-lounge-handle="${kind}"></rect>`;
-      const outerMainX = viewState.lPosition === "LEFT" ? x(bounds.mainVisible.x1) : x(bounds.mainVisible.x0);
+      const outerMainX = state.lPosition === "LEFT" ? x(bounds.mainVisible.x1) : x(bounds.mainVisible.x0);
       svgParts.push(handle(outerMainX - grip, y(0), grip * 2, state.mainDepth * scale, "mainWidth", "ew-resize", outerMainX, y(0), outerMainX, y(state.mainDepth)));
-      const boundaryX = viewState.lPosition === "LEFT" ? x(bounds.lVisible.x1) : x(bounds.lVisible.x0);
+      const boundaryX = state.lPosition === "LEFT" ? x(bounds.lVisible.x1) : x(bounds.lVisible.x0);
       svgParts.push(handle(boundaryX - grip, y(0), grip * 2, state.lDepth * scale, "lWidth", "ew-resize", boundaryX, y(0), boundaryX, y(state.lDepth)));
       svgParts.push(handle(x(bounds.mainVisible.x0), y(state.mainDepth) - grip, Math.max(1, (bounds.mainVisible.x1 - bounds.mainVisible.x0) * scale), grip * 2, "mainDepth", "ns-resize", x(bounds.mainVisible.x0), y(state.mainDepth), x(bounds.mainVisible.x1), y(state.mainDepth)));
       svgParts.push(handle(x(bounds.lVisible.x0), y(state.lDepth) - grip, Math.max(1, (bounds.lVisible.x1 - bounds.lVisible.x0) * scale), grip * 2, "lDepth", "ns-resize", x(bounds.lVisible.x0), y(state.lDepth), x(bounds.lVisible.x1), y(state.lDepth)));
@@ -5146,8 +5200,7 @@
         scale: effectiveScale,
         startX: event.clientX,
         startY: event.clientY,
-        // Drag math runs against the displayed (mirrored) orientation, not the internal one.
-        lPosition: state.lPosition === "LEFT" ? "RIGHT" : "LEFT",
+        lPosition: state.lPosition,
         start: {
           totalWidth: state.totalWidth,
           singleLoungeWidth: state.singleLoungeWidth,
@@ -5254,7 +5307,16 @@
         style: "style_1",
         frontRailHeight: generalTallNumberValue(`${prefix}Style1FrontRailHeight`),
         insertSlotThickness: generalTallNumberValue(`${prefix}Style1InsertSlotThickness`) || 16,
+        ledGroove: document.getElementById(`${prefix}Style1LedGroove`)?.checked !== false,
       };
+    }
+
+    function syncGeneralTallStyleOptionVisibility(prefix) {
+      const style = document.getElementById(`${prefix}Style`)?.value;
+      const style1 = document.getElementById(`${prefix}Style1Options`);
+      const style2 = document.getElementById(`${prefix}Style2Options`);
+      if (style1) style1.hidden = style !== "style_1";
+      if (style2) style2.hidden = style !== "style_2";
     }
 
     function generalTallEditableHeight() {
@@ -5481,6 +5543,14 @@
       return bounds.slice(0, -1).map((item) => item.x1);
     }
 
+    function syncOverheadStyle1LedVisibility(bench) {
+      // Overhead Style does not gate the LED option (BP always exists).
+      return runOverheadBench(bench || overheadMainBench, () => {
+        const wrap = ohEl("Style1LedGrooveWrap");
+        if (wrap) wrap.hidden = false;
+      });
+    }
+
     function buildOverheadParams() {
       normalizeOverheadZoneWidths();
       const fgWidth = ohNum("SideThickness");
@@ -5494,6 +5564,7 @@
         topClearanceHeight: ohNum("TopClearanceHeight"),
         frontPanelThickness: ohNum("FrontPanelThickness"),
         clearance: ohNum("Clearance"),
+        ledGroove: ohEl("Style1LedGroove")?.checked !== false,
         hingeHoleDiameter: ohNum("HingeHoleDiameter"),
         hingeHoleDepth: ohNum("HingeHoleDepth"),
         hingeHoleFromTop: ohNum("HingeFromTop"),
@@ -8025,6 +8096,9 @@
               <option value="style_1" ${kitchenState.globalSettings.bottomClearanceStyle === "style_1" ? "selected" : ""}>${t("kitchen.style1")}</option>
               <option value="style_2" ${kitchenState.globalSettings.bottomClearanceStyle === "style_2" ? "selected" : ""}>${t("kitchen.style2")}</option>
             </select>
+          </label>
+          <label id="kitchenPropBottomLedGrooveWrap" ${kitchenState.globalSettings.bottomClearanceStyle === "style_2" ? "hidden" : ""}>
+            <span><input id="kitchenPropBottomLedGroove" type="checkbox" ${kitchenState.globalSettings.ledGroove !== false ? "checked" : ""} style="width:auto"> LED groove on B3 (Style 1)</span>
           </label>`;
       } else if (selection.type === "wheel_avoidance") {
         const avoidance = kitchenState.wheelAvoidances.find((item) => item.id === selection.avoidanceId);
@@ -8702,7 +8776,16 @@
       const bottomStyle = document.getElementById("kitchenPropBottomStyle");
       if (bottomStyle) bottomStyle.addEventListener("change", () => {
         kitchenState.globalSettings.bottomClearanceStyle = bottomStyle.value;
+        const globalStyle = document.getElementById("kitchenBottomClearanceStyle");
+        if (globalStyle) globalStyle.value = bottomStyle.value;
+        kitchenSyncBottomStyle1LedVisibility();
         renderKitchenUi();
+      });
+      const propLed = document.getElementById("kitchenPropBottomLedGroove");
+      if (propLed) propLed.addEventListener("change", () => {
+        kitchenState.globalSettings.ledGroove = propLed.checked !== false;
+        const globalLed = document.getElementById("kitchenBottomStyle1LedGroove");
+        if (globalLed) globalLed.checked = propLed.checked;
       });
 
       ["X0", "X1", "Height", "Depth"].forEach((name) => {
@@ -8811,6 +8894,8 @@
           el.value = state.value;
         }
       });
+      syncGeneralTallStyleOptionVisibility("gtTop");
+      syncGeneralTallStyleOptionVisibility("gtBottom");
     }
 
     function cloneGeneralTallZone(zone) {
@@ -8904,7 +8989,14 @@
     }
 
     // ---- Generic multi-preset library (dropdown + Load / Save New / Update / Delete) ----
+    // Fusion palette localStorage is wiped when Fusion closes / palette is recreated.
+    // Source of truth is Python → %APPDATA%/UnifiedCabinet/presets/<module>.json
+    const presetManagersByModule = {};
+
     function createPresetManager(config) {
+      let memoryLibrary = null;
+      let diskHydrated = false;
+
       function status(text) {
         document.getElementById("statusText").textContent = text;
       }
@@ -8923,44 +9015,100 @@
         };
       }
 
-      function writeLibrary(library) {
-        try {
-          localStorage.setItem(config.storageKey, JSON.stringify(library));
-          return true;
-        } catch (error) {
-          reportError(`${config.statusLabel} preset library save failed: ${error.message}`);
-          return false;
-        }
+      function emptyLibrary() {
+        return { version: 2, module: config.moduleKey, activeId: "", items: [] };
       }
 
-      function readLibrary() {
-        let library = null;
+      function persistToDisk(library) {
+        fusionSend("presets.saveLibrary", {
+          moduleKey: config.moduleKey,
+          library,
+        });
+      }
+
+      function writeLibrary(library) {
+        memoryLibrary = library;
+        try {
+          localStorage.setItem(config.storageKey, JSON.stringify(library));
+        } catch (error) {
+          // localStorage is best-effort cache only; disk save is authoritative.
+        }
+        persistToDisk(library);
+        return true;
+      }
+
+      function readLocalStorageLibrary() {
         try {
           const raw = localStorage.getItem(config.storageKey);
           if (raw) {
             const parsed = JSON.parse(raw);
-            if (parsed && parsed.version === 2 && Array.isArray(parsed.items)) library = parsed;
+            if (parsed && parsed.version === 2 && Array.isArray(parsed.items)) return parsed;
           }
         } catch (error) {
-          library = null;
+          /* ignore */
         }
-        if (!library) {
-          library = { version: 2, module: config.moduleKey, activeId: "", items: [] };
-          // One-time migration of the old single-slot preset.
+        return null;
+      }
+
+      function migrateLegacyLocal() {
+        try {
+          const legacyRaw = config.legacyKey ? localStorage.getItem(config.legacyKey) : null;
+          if (!legacyRaw) return null;
+          const legacy = JSON.parse(legacyRaw);
+          if (!legacy || typeof legacy !== "object") return null;
+          const library = emptyLibrary();
+          const item = makeItem("Imported v1 preset", legacy);
+          library.items.push(item);
+          library.activeId = item.id;
+          return library;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function readLibrary() {
+        if (memoryLibrary) return memoryLibrary;
+        const cached = readLocalStorageLibrary();
+        if (cached) {
+          memoryLibrary = cached;
+          return memoryLibrary;
+        }
+        const migrated = migrateLegacyLocal();
+        if (migrated) {
+          writeLibrary(migrated);
+          return memoryLibrary;
+        }
+        memoryLibrary = emptyLibrary();
+        return memoryLibrary;
+      }
+
+      function applyDiskLibrary(library, exists) {
+        const incoming = library && library.version === 2 && Array.isArray(library.items)
+          ? library
+          : emptyLibrary();
+        diskHydrated = true;
+        const local = readLocalStorageLibrary();
+        // Prefer disk when it has items. If disk empty but local still has items
+        // (first run after this fix), migrate local → disk.
+        if ((incoming.items || []).length > 0 || exists) {
+          memoryLibrary = incoming;
           try {
-            const legacyRaw = config.legacyKey ? localStorage.getItem(config.legacyKey) : null;
-            if (legacyRaw) {
-              const legacy = JSON.parse(legacyRaw);
-              if (legacy && typeof legacy === "object") {
-                const item = makeItem("Imported v1 preset", legacy);
-                library.items.push(item);
-                library.activeId = item.id;
-              }
-            }
-          } catch (error) { /* legacy preset unreadable; start empty */ }
-          writeLibrary(library);
+            localStorage.setItem(config.storageKey, JSON.stringify(incoming));
+          } catch (error) { /* ignore */ }
+          renderSelect(memoryLibrary);
+          return;
         }
-        return library;
+        if (local && (local.items || []).length > 0) {
+          writeLibrary(local);
+          renderSelect(local);
+          return;
+        }
+        memoryLibrary = incoming;
+        renderSelect(memoryLibrary);
+      }
+
+      function requestDiskHydrate() {
+        fusionSend("presets.loadLibrary", { moduleKey: config.moduleKey });
       }
 
       function uniqueName(library, base) {
@@ -9012,7 +9160,7 @@
         if (nameInput) nameInput.value = "";
         renderSelect(library);
         notifyActive(item);
-        status(`${config.statusLabel} preset "${item.name}" saved`);
+        status(`${config.statusLabel} preset "${item.name}" saved (persists after Fusion restart)`);
       }
 
       function update() {
@@ -9111,9 +9259,40 @@
           }
         });
         renderSelect();
+        requestDiskHydrate();
       }
 
-      return { readLibrary, renderSelect, saveNew, update, loadSelected, deleteSelected, addItem, activeItem, selectedItem, bind };
+      const api = {
+        moduleKey: config.moduleKey,
+        readLibrary,
+        renderSelect,
+        saveNew,
+        update,
+        loadSelected,
+        deleteSelected,
+        addItem,
+        activeItem,
+        selectedItem,
+        bind,
+        applyDiskLibrary,
+        requestDiskHydrate,
+        isDiskHydrated: () => diskHydrated,
+      };
+      presetManagersByModule[config.moduleKey] = api;
+      return api;
+    }
+
+    function handlePresetLibraryResult(parsed) {
+      if (!parsed || !parsed.ok) {
+        const errs = (parsed && parsed.errors) || ["preset library request failed"];
+        document.getElementById("statusText").textContent = String(errs[0] || "preset library failed");
+        return;
+      }
+      const manager = presetManagersByModule[parsed.moduleKey];
+      if (!manager) return;
+      if (parsed.action === "presets.loadLibrary" || parsed.library) {
+        manager.applyDiskLibrary(parsed.library, parsed.exists === true);
+      }
     }
 
     function gtSyncPresetTextarea(data) {
@@ -9703,7 +9882,9 @@
         try {
           const parsed = data ? JSON.parse(data) : {};
           maybeShowPartDocumentNotice(parsed);
-          if (action === "generalTallResult") {
+          if (action === "presetLibraryResult") {
+            handlePresetLibraryResult(parsed);
+          } else if (action === "generalTallResult") {
             if (parsed.ok && parsed.result) {
               renderGeneralTallResult(parsed.result);
               if (generalTallState.pendingFusionCreate) {
@@ -9768,10 +9949,14 @@
             const faceLine = faceInit.initializedCount
               ? `, face metadata on ${faceInit.initializedCount} board(s)`
               : "";
+            const ledCreated = Number(parsed?.ledGrooveCutsCreated || 0);
+            const ledFailed = Number(parsed?.ledGrooveCutsFailed || 0);
+            const ledSkipped = Number(parsed?.ledGrooveCutsSkipped || 0);
+            const ledLine = `, LED ${ledCreated} created / ${ledFailed} failed / ${ledSkipped} skipped`;
             setOverheadStatusText(
               bench,
               parsed?.ok
-                ? `Overhead Fusion created ${createdBodies} rough bodies${assemblyName} (${skipped} skipped)${faceLine}`
+                ? `Overhead Fusion created ${createdBodies} rough bodies${assemblyName} (${skipped} skipped)${faceLine}${ledLine}`
                 : "Overhead Fusion rough body creation failed",
             );
           } else if (action === "kitchenGeometryResult") {
@@ -9844,8 +10029,9 @@
           } else if (action === "loungeAssemblyBodyResult") {
             document.getElementById("loungeResultBox").textContent = JSON.stringify(parsed, null, 2);
             const deleted = parsed?.deletedPrevious || {};
+            const cutFails = (parsed?.cutAudit || []).filter((c) => c && c.status && c.status !== "created").length;
             document.getElementById("statusText").textContent = parsed?.ok
-              ? `Lounge assembly bodies: ${parsed.createdBodies || 0} bodies (deleted ${deleted.bodies || 0} old)`
+              ? `Lounge assembly bodies: ${parsed.createdBodies || 0} bodies (deleted ${deleted.bodies || 0} old)${cutFails ? `; ${cutFails} cut issue(s) — see cutAudit` : ""}`
               : "Lounge assembly body creation failed";
           } else if (action === "relationshipScanResult") {
             connectUiHandleScanResult(parsed);
@@ -9917,6 +10103,14 @@
     document.getElementById("gtGenerateBtn").addEventListener("click", generalTallGenerate);
     document.getElementById("gtLoadFridgeLayoutBtn").addEventListener("click", applyGeneralTallFridgeLayout);
     document.getElementById("gtCreateFusionBodiesBtn").addEventListener("click", generalTallCreateFusionRoughBodies);
+    ["gtTopStyle", "gtBottomStyle"].forEach((id) => {
+      document.getElementById(id)?.addEventListener("change", () => {
+        syncGeneralTallStyleOptionVisibility("gtTop");
+        syncGeneralTallStyleOptionVisibility("gtBottom");
+      });
+    });
+    syncGeneralTallStyleOptionVisibility("gtTop");
+    syncGeneralTallStyleOptionVisibility("gtBottom");
     gtPresetManager.bind();
     document.getElementById("gtExportPresetBtn").addEventListener("click", generalTallExportPresetFile);
     document.getElementById("gtImportPresetFile").addEventListener("change", (event) => {
@@ -9929,11 +10123,15 @@
     ohPresetManager.bind();
     document.getElementById("ohAddZoneBtn").addEventListener("click", () => runOverheadBench(overheadMainBench, addOverheadZone));
     document.getElementById("ohDeleteZoneBtn").addEventListener("click", () => runOverheadBench(overheadMainBench, deleteOverheadZone));
+    document.getElementById("ohStyle").addEventListener("change", () => syncOverheadStyle1LedVisibility(overheadMainBench));
+    syncOverheadStyle1LedVisibility(overheadMainBench);
     document.getElementById("aohGenerateBtn").addEventListener("click", () => overheadGenerate(attrOverheadBench));
     document.getElementById("aohCreateFusionBodiesBtn").addEventListener("click", () => overheadCreateFusionRoughBodies(attrOverheadBench));
     aohPresetManager.bind();
     document.getElementById("aohAddZoneBtn").addEventListener("click", () => runOverheadBench(attrOverheadBench, addOverheadZone));
     document.getElementById("aohDeleteZoneBtn").addEventListener("click", () => runOverheadBench(attrOverheadBench, deleteOverheadZone));
+    document.getElementById("aohStyle").addEventListener("change", () => syncOverheadStyle1LedVisibility(attrOverheadBench));
+    syncOverheadStyle1LedVisibility(attrOverheadBench);
     bindOverheadZoneProperties(overheadMainBench);
     bindOverheadZoneProperties(attrOverheadBench);
     runOverheadBench(attrOverheadBench, () => renderOverheadUi(null));
@@ -9972,6 +10170,7 @@
       "kitchenFrontClearance",
       "kitchenBottomClearanceHeight",
       "kitchenBottomClearanceStyle",
+      "kitchenBottomStyle1LedGroove",
       "kitchenLockEnabled",
       "kitchenLockPreset",
     ].forEach((id) => {
@@ -9979,6 +10178,9 @@
         const oldEditable = kitchenEditableHeight();
         const oldColumnTotal = kitchenTotalColumnWidth();
         kitchenReadGlobalInputs();
+        if (id === "kitchenBottomClearanceStyle") {
+          kitchenSyncBottomStyle1LedVisibility();
+        }
         if (id === "kitchenLength") {
           kitchenScaleColumnsToLength(kitchenState.globalSettings.length, oldColumnTotal);
         }
@@ -10790,12 +10992,18 @@
         const partsInPart = document.getElementById("nestingAllowPartsInPart");
         const rotation = document.getElementById("nestingAllowRotation");
         const increment = document.getElementById("nestingRotationIncrementDeg");
+        const engine = document.getElementById("nestingEngineMode");
+        const qualityLimit = document.getElementById("nestingQualityTimeLimitSec");
         if (border && Number.isFinite(Number(saved?.borderMm))) border.value = Math.max(0, Number(saved.borderMm));
         if (spacing && Number.isFinite(Number(saved?.spacingMm))) spacing.value = Math.max(0, Number(saved.spacingMm));
         if (partsInPart) partsInPart.checked = Boolean(saved?.allowPartsInPart);
         if (rotation) rotation.checked = saved?.allowRotation !== false;
         if (increment && Number.isFinite(Number(saved?.rotationIncrementDeg))) {
           increment.value = Math.max(1, Number(saved.rotationIncrementDeg));
+        }
+        if (engine && ["sheet_pack", "sparrow"].includes(saved?.engine)) engine.value = saved.engine;
+        if (qualityLimit && Number.isFinite(Number(saved?.qualityTimeLimitSec))) {
+          qualityLimit.value = Math.max(1, Number(saved.qualityTimeLimitSec));
         }
       } catch (ignore) {
         // Invalid/blocked local storage falls back to UI defaults.
@@ -10868,7 +11076,8 @@
         ? `rotation yes · ${params.rotationIncrementDeg}°`
         : "rotation no";
       const pip = params.allowPartsInPart ? "parts-in-part yes" : "parts-in-part no";
-      summary.textContent = `sheet_pack_poly_v1 · saved default · border ${params.borderMm} mm · spacing ${params.spacingMm} mm · ${pip} · ${rot} · sheets: ${sheetBits.join(" · ") || "none"}.`;
+      const engine = params.engine === "sparrow" ? `Sparrow quality ${params.qualityTimeLimitSec}s` : "Fast Hybrid";
+      summary.textContent = `${engine} · saved default · border ${params.borderMm} mm · spacing ${params.spacingMm} mm · ${pip} · ${rot} · sheets: ${sheetBits.join(" · ") || "none"}.`;
       summary.className = "message ok";
       nestingSaveSheetParamsDefaults(params);
     }
@@ -10971,6 +11180,9 @@
       const allowRotation = Boolean(document.getElementById("nestingAllowRotation")?.checked);
       let rotationIncrementDeg = Number(document.getElementById("nestingRotationIncrementDeg")?.value || 90);
       if (!Number.isFinite(rotationIncrementDeg) || rotationIncrementDeg < 1) rotationIncrementDeg = 90;
+      const engine = document.getElementById("nestingEngineMode")?.value === "sparrow" ? "sparrow" : "sheet_pack";
+      let qualityTimeLimitSec = Number(document.getElementById("nestingQualityTimeLimitSec")?.value || 30);
+      if (!Number.isFinite(qualityTimeLimitSec) || qualityTimeLimitSec < 1) qualityTimeLimitSec = 30;
       return {
         sheets,
         borderMm,
@@ -10978,6 +11190,8 @@
         allowPartsInPart,
         allowRotation,
         rotationIncrementDeg: allowRotation ? rotationIncrementDeg : null,
+        engine,
+        qualityTimeLimitSec,
       };
     }
 
@@ -11030,6 +11244,7 @@
       }
       fusionSend("panelAttributes.createNestingZoneLayout", {
         sheetParams,
+        nestingEngine: sheetParams.engine,
       });
     }
 
@@ -13688,6 +13903,7 @@
             : [];
           const runningWorkers = workers.filter((worker) => worker?.running).length;
           const primaryValidation = parsed.primaryCollisionValidation || {};
+          const phases = parsed.diagnostics?.phasesMs || {};
           const primaryCollisions = Array.isArray(primaryValidation.collisions)
             ? primaryValidation.collisions
             : [];
@@ -13697,16 +13913,19 @@
             return `${a} ↔ ${b}`;
           }).join(", ");
           const zoneLine = parsed.ok
-            ? `<div class="muted" style="margin-top:6px;">Engine ${escapeHtml(parsed.engine || "sheet_pack_v1")} · ${Number(parsed.sheetCount || sheets.length || 0)} sheet(s) · Nesting Zone ${Number(parsed.nestingWidthMm || 0).toFixed(0)} × ${Number(parsed.nestingDepthMm || 0).toFixed(0)} mm${parsed.zoneGrown ? " (expanded to fit layout)" : ""} · required ${Number(parsed.requiredWidthMm || 0).toFixed(0)} × ${Number(parsed.requiredDepthMm || 0).toFixed(0)} mm${Number(parsed.unplacedCount || 0) ? ` · unplaced ${Number(parsed.unplacedCount)}` : ""}</div>`
+            ? `<div class="muted" style="margin-top:6px;">Engine ${escapeHtml(parsed.engine || "sheet_pack_hybrid_v3")} · ${Number(parsed.sheetCount || sheets.length || 0)} sheet(s) · Nesting Zone ${Number(parsed.nestingWidthMm || 0).toFixed(0)} × ${Number(parsed.nestingDepthMm || 0).toFixed(0)} mm${parsed.zoneGrown ? " (expanded to fit layout)" : ""} · required ${Number(parsed.requiredWidthMm || 0).toFixed(0)} × ${Number(parsed.requiredDepthMm || 0).toFixed(0)} mm${Number(parsed.unplacedCount || 0) ? ` · unplaced ${Number(parsed.unplacedCount)}` : ""}</div>`
             : `<div class="message error" style="margin-top:6px;">Collision validation stopped this layout. Previous Nesting layout preserved.</div>`;
-          const safetyLine = `<div class="muted" style="margin-top:4px;">Validation ${escapeHtml(validation.status || (parsed.ok ? "safe" : "failed"))} · collisions ${Number(parsed.collisionCount || 0)}${parsed.validationFallback ? " · sheet_pack safety fallback used" : ""} · through holes ${Number(parsed.holeOutlineCount || 0)} · nested in holes ${Number(parsed.nestedInHoleCount || 0)}${workers.length ? ` · persistent workers ${runningWorkers}/${workers.length}` : ""}</div>`;
+          const safetyLine = `<div class="muted" style="margin-top:4px;">Validation ${escapeHtml(validation.status || (parsed.ok ? "safe" : "failed"))} · collisions ${Number(parsed.collisionCount || 0)} · mapping errors ${Number(parsed.mappingWarningCount || validation.mappingWarningCount || 0)} · sheet overlaps ${Number(parsed.sheetOverlapCount || validation.sheetOverlapCount || 0)}${parsed.exactValidationIncomplete || validation.exactValidationIncomplete ? " · exact validation incomplete" : ""}${parsed.validationFallback ? " · sheet_pack safety fallback used" : ""} · through holes ${Number(parsed.holeOutlineCount || 0)} · nested in holes ${Number(parsed.nestedInHoleCount || 0)}${workers.length ? ` · persistent workers ${runningWorkers}/${workers.length}` : ""}</div>`;
+          const timingLine = parsed.ok
+            ? `<div class="muted" style="margin-top:4px;">Timing · scan ${(Number(phases.scanWalk || 0) / 1000).toFixed(1)}s · prepare ${(Number(phases.prepare || 0) / 1000).toFixed(1)}s · pack ${(Number(phases.pack || 0) / 1000).toFixed(1)}s · Fusion create ${(Number(phases.createBodies || 0) / 1000).toFixed(1)}s · mark ${(Number(phases.markWorkpieces || 0) / 1000).toFixed(1)}s</div>`
+            : "";
           const fallbackDetail = parsed.validationFallback
             ? `<div class="message warn" style="margin-top:4px;">${escapeHtml(parsed.validationFallbackReason || "Deepnest result was rejected by safety validation.")}${primaryCollisionNames ? ` ${escapeHtml(primaryCollisionNames)}` : ""}</div>`
             : "";
           const sheetLines = sheets.map((sheet) => (
             `<div class="attr-tag-pending-item" style="margin-top:6px;">
               <strong>Sheet ${Number(sheet.sheetIndex || 0) + 1}: ${escapeHtml(sheet.boardTypeTag || "?")} + ${escapeHtml(sheet.colorTag || "?")}</strong>
-              <div class="muted">${Number(sheet.count || 0)} panel(s) · ${Number(sheet.widthMm || 0).toFixed(0)} × ${Number(sheet.heightMm || 0).toFixed(0)} mm · util ${(100 * Number(sheet.utilization || 0)).toFixed(0)}%</div>
+              <div class="muted">${Number(sheet.count || 0)} panel(s) · ${Number(sheet.widthMm || 0).toFixed(0)} × ${Number(sheet.heightMm || 0).toFixed(0)} mm · at ${Number(sheet.originX || 0).toFixed(0)}, ${Number(sheet.originY || 0).toFixed(0)} · util ${(100 * Number(sheet.utilization || 0)).toFixed(0)}%</div>
             </div>`
           )).join("");
           const groupLines = (!sheets.length ? groups : []).map((group) => (
@@ -13715,7 +13934,7 @@
               <div class="muted">${Number(group.count || 0)} panel(s) · ${Number(group.widthMm || 0).toFixed(0)} × ${Number(group.depthMm || 0).toFixed(0)} mm</div>
             </div>`
           )).join("");
-          groupsHost.innerHTML = zoneLine + safetyLine + fallbackDetail + sheetLines + groupLines;
+          groupsHost.innerHTML = zoneLine + safetyLine + timingLine + fallbackDetail + sheetLines + groupLines;
         }
         attrShowFormMessage(msg, kind, {
           action: "createNestingZoneLayout",
@@ -14135,6 +14354,8 @@
       document.getElementById("nestingAllowPartsInPart").addEventListener("change", nestingUpdateSheetParamsSummary);
       document.getElementById("nestingAllowRotation").addEventListener("change", nestingUpdateRotationIncrementUi);
       document.getElementById("nestingRotationIncrementDeg").addEventListener("change", nestingUpdateSheetParamsSummary);
+      document.getElementById("nestingEngineMode").addEventListener("change", nestingUpdateSheetParamsSummary);
+      document.getElementById("nestingQualityTimeLimitSec").addEventListener("change", nestingUpdateSheetParamsSummary);
       nestingLoadSheetParamsDefaults();
       nestingSyncSheetSizesFromBoardTypes();
       nestingUpdateRotationIncrementUi();
@@ -15817,7 +16038,6 @@
     renderGeneralTallZones();
     updateGeneralTallFusionButtonState(null);
     showModule("generalTall");
-    syncCabinetWidthFromFridge();
     const paletteCloseBtn = document.getElementById("paletteCloseBtn");
     if (paletteCloseBtn) {
       paletteCloseBtn.addEventListener("click", () => {

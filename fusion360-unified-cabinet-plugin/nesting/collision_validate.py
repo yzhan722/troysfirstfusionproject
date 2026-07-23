@@ -24,7 +24,13 @@ BORDER_SLACK_MM = 0.25
 # is not discarded for a single near-miss (sheet_pack is much worse util).
 SPACING_SLACK_MM = 1.0
 MAPPING_TOLERANCE_MM = 0.5
+# ``sheet_pack`` deliberately simplifies packed outlines with a 1 mm
+# Douglas-Peucker tolerance.  That approximation is covered by the validator's
+# 1 mm spacing slack and exact BRep pass, so it must not be treated as a failed
+# transform mapping.  Keep the stricter tolerance above for actual BRep bounds.
+PACKED_OUTLINE_TOLERANCE_MM = 1.0 + 1e-6
 EXACT_CANDIDATE_LIMIT = 64
+MAX_EXACT_BREP_PAIRS = 512
 
 
 def _num(value, default=0.0):
@@ -95,6 +101,36 @@ def _aabb_overlaps(a, b, tolerance=1e-9):
         or a["maxY"] < b["minY"] - tolerance
         or b["maxY"] < a["minY"] - tolerance
     )
+
+
+def _strict_aabb_overlaps(a, b, tolerance=1e-9):
+    return (
+        a["minX"] < b["maxX"] - tolerance
+        and b["minX"] < a["maxX"] - tolerance
+        and a["minY"] < b["maxY"] - tolerance
+        and b["minY"] < a["maxY"] - tolerance
+    )
+
+
+def _bounds_overlap_3d(a, b, tolerance=1e-6):
+    return (
+        a["minX"] < b["maxX"] - tolerance
+        and b["minX"] < a["maxX"] - tolerance
+        and a["minY"] < b["maxY"] - tolerance
+        and b["minY"] < a["maxY"] - tolerance
+        and a["minZ"] < b["maxZ"] - tolerance
+        and b["minZ"] < a["maxZ"] - tolerance
+    )
+
+
+def _broadphase_pairs_3d(bounds_by_index):
+    indexes = sorted(bounds_by_index)
+    pairs = []
+    for offset, left in enumerate(indexes):
+        for right in indexes[offset + 1 :]:
+            if _bounds_overlap_3d(bounds_by_index[left], bounds_by_index[right]):
+                pairs.append((left, right))
+    return pairs
 
 
 def _ring_fully_inside(inner, outer):
@@ -195,22 +231,46 @@ def _sheet_record(layout, placement, params):
 
 
 def _ring_difference_mm(a, b):
-    """Order-independent vertex/bounds drift, suitable for equivalent rings."""
+    """Order-independent boundary/bounds drift for equivalent rings.
+
+    Packed outlines are intentionally simplified before placement.  Comparing
+    vertices directly makes a removed point look far from its two surviving
+    neighbours even when it still lies exactly on the segment between them.
+    Measure point-to-segment distance instead so simplification is not reported
+    as a transform mismatch.
+    """
     a = geometry.close_ring(a)
     b = geometry.close_ring(b)
     if len(a) < 4 or len(b) < 4:
         return float("inf")
+
+    def point_to_boundary(point, ring):
+        px, py = point
+        best = float("inf")
+        for index in range(len(ring) - 1):
+            ax, ay = ring[index]
+            bx, by = ring[index + 1]
+            dx, dy = bx - ax, by - ay
+            length2 = dx * dx + dy * dy
+            if length2 <= 1e-18:
+                distance = math.hypot(px - ax, py - ay)
+            else:
+                t = max(
+                    0.0,
+                    min(1.0, ((px - ax) * dx + (py - ay) * dy) / length2),
+                )
+                distance = math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+            best = min(best, distance)
+        return best
+
     ba, bb = geometry.polygon_bounds(a), geometry.polygon_bounds(b)
     drift = max(
         abs(ba[key] - bb[key])
         for key in ("minX", "minY", "maxX", "maxY")
     )
     for source, target in ((a[:-1], b[:-1]), (b[:-1], a[:-1])):
-        for x, y in source:
-            drift = max(
-                drift,
-                min(math.hypot(x - tx, y - ty) for tx, ty in target),
-            )
+        for point in source:
+            drift = max(drift, point_to_boundary(point, target + [target[0]]))
     return drift
 
 
@@ -227,13 +287,13 @@ def _mapping_warning(entry):
         _ring_difference_mm(entry["shape"]["outer"], candidate)
         for candidate in candidates
     )
-    if drift <= MAPPING_TOLERANCE_MM:
+    if drift <= PACKED_OUTLINE_TOLERANCE_MM:
         return None
     return {
         **_identity(entry),
         "sheetIndex": entry["sheetIndex"],
         "maxDriftMm": drift,
-        "toleranceMm": MAPPING_TOLERANCE_MM,
+        "toleranceMm": PACKED_OUTLINE_TOLERANCE_MM,
         "message": "packedOutline differs from the Fusion creation transform.",
     }
 
@@ -251,6 +311,7 @@ def validate_layout(layout, prepared_items, sheet_params):
     entries = []
     mapping_warnings = []
     border_violations = []
+    sheet_overlaps = []
     checks = {
         "placements": len(placements),
         "mappedPlacements": 0,
@@ -314,6 +375,37 @@ def validate_layout(layout, prepared_items, sheet_params):
                 "slackMm": BORDER_SLACK_MM,
             })
 
+    sheet_records = []
+    seen_sheet_indexes = set()
+    for sheet in (layout or {}).get("sheets") or []:
+        if not isinstance(sheet, dict):
+            continue
+        sheet_index = int(sheet.get("sheetIndex") or 0)
+        if sheet_index in seen_sheet_indexes:
+            continue
+        seen_sheet_indexes.add(sheet_index)
+        x0 = _num(sheet.get("originX"))
+        y0 = _num(sheet.get("originY"))
+        sheet_records.append({
+            "sheetIndex": sheet_index,
+            "boardTypeTag": str(sheet.get("boardTypeTag") or ""),
+            "colorTag": str(sheet.get("colorTag") or ""),
+            "minX": x0,
+            "minY": y0,
+            "maxX": x0 + _num(sheet.get("widthMm")),
+            "maxY": y0 + _num(sheet.get("heightMm")),
+        })
+    for left in range(len(sheet_records)):
+        for right in range(left + 1, len(sheet_records)):
+            a = sheet_records[left]
+            b = sheet_records[right]
+            if _strict_aabb_overlaps(a, b):
+                sheet_overlaps.append({
+                    "a": a,
+                    "b": b,
+                    "message": "Physical sheet rectangles overlap in world XY.",
+                })
+
     collisions = []
     exact_candidates = []
     for left in range(len(entries)):
@@ -359,8 +451,12 @@ def validate_layout(layout, prepared_items, sheet_params):
                 # Fusion TemporaryBRep check targets.
                 exact_candidates.append([a["index"], b["index"]])
 
-    ok = not collisions and not border_violations and checks["mappedPlacements"] == len(
-        placements
+    ok = (
+        not collisions
+        and not border_violations
+        and not mapping_warnings
+        and not sheet_overlaps
+        and checks["mappedPlacements"] == len(placements)
     )
     return {
         "ok": ok,
@@ -371,6 +467,8 @@ def validate_layout(layout, prepared_items, sheet_params):
         "borderViolationCount": len(border_violations),
         "mappingWarnings": mapping_warnings,
         "mappingWarningCount": len(mapping_warnings),
+        "sheetOverlaps": sheet_overlaps,
+        "sheetOverlapCount": len(sheet_overlaps),
         "checks": checks,
         "exactChecks": 0,
         "exactCheckWarnings": [],
@@ -379,17 +477,17 @@ def validate_layout(layout, prepared_items, sheet_params):
 
 
 def validate_fusion_exact(layout, prepared_items, sheet_params, polygon_result=None):
-    """Confirm ambiguous legal AABB overlaps with Fusion TemporaryBRep copies.
+    """Validate cached-outline mapping and suspicious pairs with real BReps.
 
-    API absence/errors remain warnings. A confirmed non-trivial intersection is
-    the only condition that changes a polygon-legal result to unsafe.
+    Every prepared body is transformed exactly as Fusion creation will transform
+    it. A cheap real-BRep bbox pass finds candidates; boolean intersection runs
+    only for those pairs. Any incomplete exact validation is unsafe.
     """
     result = dict(polygon_result or validate_layout(layout, prepared_items, sheet_params))
     result["collisions"] = list(result.get("collisions") or [])
     result["exactCheckWarnings"] = list(result.get("exactCheckWarnings") or [])
-    candidates = list(result.get("exactCandidates") or [])[:EXACT_CANDIDATE_LIMIT]
-    if not candidates:
-        return result
+    result["mappingWarnings"] = list(result.get("mappingWarnings") or [])
+    result["exactValidationIncomplete"] = False
     try:
         import adsk.core
         import adsk.fusion
@@ -400,11 +498,15 @@ def validate_fusion_exact(layout, prepared_items, sheet_params, polygon_result=N
             raise RuntimeError("TemporaryBRep boolean intersection is unavailable.")
     except Exception as ex:
         result["exactCheckWarnings"].append(str(ex))
+        result["exactValidationIncomplete"] = True
+        result["ok"] = False
+        result["status"] = "unsafe"
         return result
 
     placements = list((layout or {}).get("placements") or [])
     by_id = {str(item.get("id")): item for item in prepared_items or []}
     transformed = {}
+    transformed_bounds = {}
 
     def transformed_body(index):
         if index in transformed:
@@ -433,7 +535,65 @@ def validate_fusion_exact(layout, prepared_items, sheet_params, polygon_result=N
         )
         manager.transform(body, translation)
         transformed[index] = body
+        placed_bbox = body.boundingBox
+        transformed_bounds[index] = {
+            "minX": placed_bbox.minPoint.x * 10.0,
+            "minY": placed_bbox.minPoint.y * 10.0,
+            "minZ": placed_bbox.minPoint.z * 10.0,
+            "maxX": placed_bbox.maxPoint.x * 10.0,
+            "maxY": placed_bbox.maxPoint.y * 10.0,
+            "maxZ": placed_bbox.maxPoint.z * 10.0,
+        }
         return body
+
+    candidate_set = {
+        tuple(sorted((int(left), int(right))))
+        for left, right in (result.get("exactCandidates") or [])
+        if int(left) != int(right)
+    }
+    for index, placement in enumerate(placements):
+        try:
+            body = transformed_body(index)
+            actual = transformed_bounds[index]
+            item = by_id[str(placement.get("id"))]
+            expected = _transform_item(item, placement)["bounds"]
+            actual_width = actual["maxX"] - actual["minX"]
+            actual_depth = actual["maxY"] - actual["minY"]
+            expected_width = expected["maxX"] - expected["minX"]
+            expected_depth = expected["maxY"] - expected["minY"]
+            drift = max(
+                abs(actual_width - expected_width),
+                abs(actual_depth - expected_depth),
+            )
+            if drift > MAPPING_TOLERANCE_MM:
+                result["mappingWarnings"].append({
+                    "id": str(placement.get("id") or ""),
+                    "panelId": placement.get("panelId") or item.get("panelId") or "",
+                    "bodyName": placement.get("bodyName") or item.get("bodyName") or "",
+                    "sheetIndex": int(placement.get("sheetIndex") or 0),
+                    "maxDriftMm": drift,
+                    "toleranceMm": MAPPING_TOLERANCE_MM,
+                    "message": "Actual transformed BRep bounds differ from cached outline.",
+                    "source": "temporaryBRep",
+                })
+        except Exception as ex:
+            result["exactCheckWarnings"].append(
+                "Exact body {}: {}".format(index, ex)
+            )
+            result["exactValidationIncomplete"] = True
+
+    candidate_set.update(_broadphase_pairs_3d(transformed_bounds))
+
+    candidates = sorted(candidate_set)
+    result["exactBroadPhaseCandidates"] = len(candidates)
+    if len(candidates) > MAX_EXACT_BREP_PAIRS:
+        result["exactCheckWarnings"].append(
+            "Exact broad phase found {} pairs; safety limit is {}.".format(
+                len(candidates), MAX_EXACT_BREP_PAIRS
+            )
+        )
+        result["exactValidationIncomplete"] = True
+        candidates = candidates[:MAX_EXACT_BREP_PAIRS]
 
     for left, right in candidates:
         try:
@@ -469,8 +629,15 @@ def validate_fusion_exact(layout, prepared_items, sheet_params, polygon_result=N
             result["exactCheckWarnings"].append(
                 "Exact pair {}-{}: {}".format(left, right, ex)
             )
+            result["exactValidationIncomplete"] = True
 
     result["collisionCount"] = len(result["collisions"])
-    result["ok"] = bool(result.get("ok")) and not result["collisions"]
+    result["mappingWarningCount"] = len(result["mappingWarnings"])
+    result["ok"] = (
+        bool(result.get("ok"))
+        and not result["collisions"]
+        and not result["mappingWarnings"]
+        and not result["exactValidationIncomplete"]
+    )
     result["status"] = "safe" if result["ok"] else "unsafe"
     return result

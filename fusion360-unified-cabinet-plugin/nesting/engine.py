@@ -7,9 +7,11 @@ import os
 
 from nesting import sheet_pack
 from nesting.engines import deepnest
+from nesting.engines import sparrow
 
 
 deepnest = importlib.reload(deepnest)
+sparrow = importlib.reload(sparrow)
 
 # Default to improved sheet_pack (fast + stable). Deepnest only for small jobs
 # when explicitly requested — large true-shape Deepnest runs often time out.
@@ -27,7 +29,7 @@ def create_layout(
 ):
     """Create a layout without exposing an engine's internal data structures.
 
-    Default engine is sheet_pack_poly_v2. Deepnest is optional for small jobs
+    Default engine is sheet_pack_hybrid_v3. Deepnest is optional for small jobs
     (``DEEPNEST_SMALL_JOB_LIMIT``); larger Deepnest requests use sheet_pack.
     """
     selected = str(
@@ -42,6 +44,7 @@ def create_layout(
         "legacy",
         "sheet_pack_poly_v1",
         "sheet_pack_poly_v2",
+        "sheet_pack_hybrid_v3",
     ):
         return sheet_pack.sheet_pack_layout(
             items, sheet_params, origin_x_mm, origin_y_mm
@@ -77,6 +80,30 @@ def create_layout(
                 items, sheet_params, origin_x_mm, origin_y_mm
             )
             fallback["requestedEngine"] = deepnest.ENGINE_NAME
+            fallback["engineFallback"] = True
+            fallback["engineFallbackReason"] = str(ex)
+            return fallback
+
+    wants_sparrow = selected in (
+        "quality",
+        "sparrow",
+        "sparrow_native",
+        sparrow.ENGINE_NAME.lower(),
+    )
+    if wants_sparrow:
+        try:
+            return sparrow.layout(
+                items,
+                sheet_params,
+                origin_x_mm,
+                origin_y_mm,
+                wait_callback=wait_callback,
+            )
+        except Exception as ex:
+            fallback = sheet_pack.sheet_pack_layout(
+                items, sheet_params, origin_x_mm, origin_y_mm
+            )
+            fallback["requestedEngine"] = sparrow.ENGINE_NAME
             fallback["engineFallback"] = True
             fallback["engineFallbackReason"] = str(ex)
             return fallback

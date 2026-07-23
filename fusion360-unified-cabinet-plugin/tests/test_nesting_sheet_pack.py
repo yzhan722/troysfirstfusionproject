@@ -14,6 +14,7 @@ from sheet_pack import (  # noqa: E402
 )
 from outline import build_outline_payload, close_ring  # noqa: E402
 import engine as nesting_engine  # noqa: E402
+from collision_validate import validate_layout  # noqa: E402
 
 
 def _part(pid, board, color, w, d, outline=None):
@@ -65,7 +66,7 @@ class SheetPackTests(unittest.TestCase):
             0,
             0,
         )
-        self.assertEqual(result["engine"], "sheet_pack_poly_v2")
+        self.assertEqual(result["engine"], "sheet_pack_hybrid_v3")
         self.assertEqual(len(result["placements"]), 2)
         self.assertEqual(len(result["sheets"]), 2)
         self.assertEqual(result["sheets"][0]["count"], 1)
@@ -99,6 +100,27 @@ class SheetPackTests(unittest.TestCase):
         door = next(s for s in result["sheets"] if s["boardTypeTag"] == "door")
         self.assertAlmostEqual(carcass["originY"], 2000)
         self.assertAlmostEqual(door["originY"], 2000 + 400 + 100)
+
+    def test_same_board_type_different_colors_use_separate_rows(self):
+        params = {
+            "sheets": [{"boardTypeTag": "door", "widthMm": 800, "heightMm": 400}],
+            "borderMm": 0,
+            "spacingMm": 0,
+            "allowRotation": False,
+            "sheetGapMm": 100,
+        }
+        result = sheet_pack_layout(
+            [
+                _part("white", "door", "white", 100, 100),
+                _part("oak", "door", "oak", 100, 100),
+            ],
+            params,
+            0,
+            0,
+        )
+        self.assertEqual(len(result["sheets"]), 2)
+        self.assertNotEqual(result["sheets"][0]["colorTag"], result["sheets"][1]["colorTag"])
+        self.assertEqual({sheet["originY"] for sheet in result["sheets"]}, {0.0, 500.0})
 
     def test_rotation_allows_fit(self):
         params = {
@@ -156,6 +178,21 @@ class SheetPackTests(unittest.TestCase):
         by_id = {p["id"]: p for p in result["placements"]}
         self.assertAlmostEqual(by_id["a"]["localX"], 0.0)
         self.assertAlmostEqual(by_id["b"]["localX"], 120.0)
+
+    def test_border_insets_first_placement(self):
+        result = sheet_pack_layout(
+            [_part("a", "door", "white", 100, 100)],
+            {
+                "sheets": [{"boardTypeTag": "door", "widthMm": 500, "heightMm": 500}],
+                "borderMm": 20,
+                "spacingMm": 0,
+                "allowRotation": False,
+            },
+            0,
+            0,
+        )
+        self.assertGreaterEqual(result["placements"][0]["localX"], 20)
+        self.assertGreaterEqual(result["placements"][0]["localY"], 20)
 
     def test_true_shape_nests_into_l_notch(self):
         """Polygon pack can place a small rect into an L notch; AABB would not."""
@@ -240,6 +277,125 @@ class SheetPackTests(unittest.TestCase):
         self.assertEqual(result["unplaced"], [])
         self.assertGreaterEqual(len(result["sheets"]), 1)
         self.assertLess(elapsed, 30.0, "sheet_pack too slow: {:.1f}s".format(elapsed))
+
+    def test_200_part_hybrid_is_fast_safe_and_compact(self):
+        import time
+
+        params = {
+            "sheets": [{"boardTypeTag": "carcass", "widthMm": 2440, "heightMm": 1220}],
+            "borderMm": 15,
+            "spacingMm": 12,
+            "allowRotation": True,
+            "rotationIncrementDeg": 90,
+            "layoutWidthMm": 10000,
+        }
+        parts = [
+            _part(
+                "p{}".format(index),
+                "carcass",
+                "white",
+                300 + (index % 7) * 35,
+                120 + (index % 5) * 40,
+            )
+            for index in range(200)
+        ]
+        started = time.perf_counter()
+        result = sheet_pack_layout(parts, params, 0, 0)
+        elapsed = time.perf_counter() - started
+        validation = validate_layout(result, parts, params)
+        self.assertEqual(len(result["placements"]), 200)
+        self.assertEqual(result["unplaced"], [])
+        self.assertTrue(validation["ok"], validation)
+        self.assertLess(elapsed, 5.0, "200-part hybrid too slow: {:.2f}s".format(elapsed))
+        self.assertLessEqual(result["requiredWidthMm"], 10000)
+        self.assertLess(result["requiredWidthMm"] / result["requiredDepthMm"], 4.0)
+
+    def test_compact_sheet_rows_wrap_at_layout_width(self):
+        params = {
+            "sheets": [{"boardTypeTag": "door", "widthMm": 1000, "heightMm": 500}],
+            "borderMm": 0,
+            "spacingMm": 0,
+            "allowRotation": False,
+            "sheetGapMm": 50,
+            "layoutWidthMm": 2050,
+        }
+        parts = [
+            _part("p{}".format(index), "door", "white", 900, 450)
+            for index in range(3)
+        ]
+        result = sheet_pack_layout(parts, params, 0, 0)
+        self.assertEqual(len(result["sheets"]), 3)
+        self.assertEqual(result["sheets"][0]["originX"], 0)
+        self.assertEqual(result["sheets"][1]["originX"], 1050)
+        self.assertEqual(result["sheets"][2]["originX"], 0)
+        self.assertEqual(result["sheets"][2]["originY"], 550)
+        self.assertEqual(result["requiredWidthMm"], 2050)
+        self.assertEqual(result["requiredDepthMm"], 1050)
+
+    def test_hybrid_layout_is_deterministic(self):
+        params = {
+            "sheets": [{"boardTypeTag": "door", "widthMm": 800, "heightMm": 500}],
+            "borderMm": 10,
+            "spacingMm": 8,
+            "allowRotation": True,
+            "rotationIncrementDeg": 90,
+        }
+        parts = [
+            _part("p{}".format(index), "door", "white", 90 + index * 7, 60 + (index % 3) * 20)
+            for index in range(12)
+        ]
+        first = sheet_pack_layout(parts, params, 0, 0)
+        second = sheet_pack_layout(parts, params, 0, 0)
+        fields = lambda result: [
+            (
+                placement["id"],
+                placement["sheetIndex"],
+                placement["localX"],
+                placement["localY"],
+                placement["rotationDeg"],
+            )
+            for placement in result["placements"]
+        ]
+        self.assertEqual(fields(first), fields(second))
+
+    def test_parts_in_validated_through_hole(self):
+        parent_outline = build_outline_payload(
+            [[0, 0], [100, 0], [100, 100], [0, 100]],
+            "flatBody",
+            100,
+            100,
+            holes=[{
+                "points": [[20, 20], [80, 20], [80, 80], [20, 80]],
+                "cutType": "FULL",
+                "kind": "HOLE",
+            }],
+        )
+        child_outline = build_outline_payload(
+            [[0, 0], [30, 0], [30, 30], [0, 30]],
+            "flatBody",
+            30,
+            30,
+        )
+        params = {
+            "sheets": [{"boardTypeTag": "door", "widthMm": 100, "heightMm": 100}],
+            "borderMm": 0,
+            "spacingMm": 1,
+            "allowRotation": False,
+            "allowPartsInPart": True,
+        }
+        result = sheet_pack_layout(
+            [
+                _part("parent", "door", "white", 100, 100, parent_outline),
+                _part("child", "door", "white", 30, 30, child_outline),
+            ],
+            params,
+            0,
+            0,
+        )
+        self.assertEqual(len(result["sheets"]), 1)
+        self.assertEqual(len(result["placements"]), 2)
+        self.assertTrue(result["partsInPartApplied"])
+        self.assertEqual(result["nestedInHoleCount"], 1)
 
     def test_consolidate_merges_sparse_tail_sheet(self):
         """A leftover singleton sheet should backfill into earlier free space."""

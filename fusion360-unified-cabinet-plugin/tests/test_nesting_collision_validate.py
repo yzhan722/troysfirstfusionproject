@@ -15,7 +15,11 @@ if "adsk" not in sys.modules:
     sys.modules["adsk.core"] = adsk.core
     sys.modules["adsk.fusion"] = adsk.fusion
 
-from nesting.collision_validate import validate_layout  # noqa: E402
+from nesting.collision_validate import (  # noqa: E402
+    _broadphase_pairs_3d,
+    validate_fusion_exact,
+    validate_layout,
+)
 from nesting.fusion_layout import (  # noqa: E402
     UnsafeNestingLayoutError,
     create_layout,
@@ -94,6 +98,63 @@ def _params(spacing=0, border=0, allow_parts=False):
     }
 
 
+class _Point:
+    def __init__(self, x, y, z):
+        self.x, self.y, self.z = x, y, z
+
+
+class _Box:
+    def __init__(self, x0, y0, z0, x1, y1, z1):
+        self.minPoint = _Point(x0, y0, z0)
+        self.maxPoint = _Point(x1, y1, z1)
+
+
+class _Body:
+    def __init__(self, bounds):
+        self.boundingBox = _Box(*bounds)
+        self.volume = 1.0
+
+
+class _Matrix:
+    def __init__(self):
+        self.translation = None
+
+    def setToRotation(self, *_args):
+        return None
+
+
+class _Manager:
+    def copy(self, body):
+        box = body.boundingBox
+        return _Body((
+            box.minPoint.x, box.minPoint.y, box.minPoint.z,
+            box.maxPoint.x, box.maxPoint.y, box.maxPoint.z,
+        ))
+
+    def transform(self, body, matrix):
+        vector = matrix.translation
+        if vector is None:
+            return True
+        box = body.boundingBox
+        body.boundingBox = _Box(
+            box.minPoint.x + vector.x,
+            box.minPoint.y + vector.y,
+            box.minPoint.z + vector.z,
+            box.maxPoint.x + vector.x,
+            box.maxPoint.y + vector.y,
+            box.maxPoint.z + vector.z,
+        )
+        return True
+
+    def booleanOperation(self, target, tool, _operation):
+        a, b = target.boundingBox, tool.boundingBox
+        dx = max(0.0, min(a.maxPoint.x, b.maxPoint.x) - max(a.minPoint.x, b.minPoint.x))
+        dy = max(0.0, min(a.maxPoint.y, b.maxPoint.y) - max(a.minPoint.y, b.minPoint.y))
+        dz = max(0.0, min(a.maxPoint.z, b.maxPoint.z) - max(a.minPoint.z, b.minPoint.z))
+        target.volume = dx * dy * dz
+        return True
+
+
 class CollisionValidationTests(unittest.TestCase):
     def test_overlap_fails(self):
         a, b = _rect("a"), _rect("b")
@@ -137,7 +198,7 @@ class CollisionValidationTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(len(result["exactCandidates"]), 1)
 
-    def test_different_sheets_do_not_collide(self):
+    def test_overlapping_physical_sheets_are_unsafe(self):
         a, b = _rect("a"), _rect("b")
         layout = _layout([(a, 10, 10, 0), (b, 10, 10, 1)])
         # Force identical world coordinates to prove sheet grouping is primary.
@@ -145,7 +206,8 @@ class CollisionValidationTests(unittest.TestCase):
         layout["placements"][1]["sheetOriginX"] = 0
         layout["sheets"][1]["originX"] = 0
         result = validate_layout(layout, [a, b], _params())
-        self.assertTrue(result["ok"])
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["sheetOverlapCount"], 1)
         self.assertEqual(result["checks"]["pairChecks"], 0)
 
     def test_border_violation_fails_beyond_slack(self):
@@ -156,15 +218,67 @@ class CollisionValidationTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["borderViolations"][0]["sides"], ["left"])
 
-    def test_mapping_drift_warns(self):
+    def test_mapping_drift_is_unsafe(self):
         item = _rect("a")
         layout = _layout([(item, 10, 10, 0)])
         layout["placements"][0]["packedOutline"] = [
             [20, 10], [40, 10], [40, 30], [20, 30], [20, 10]
         ]
         result = validate_layout(layout, [item], _params())
-        self.assertTrue(result["ok"])
+        self.assertFalse(result["ok"])
         self.assertEqual(result["mappingWarningCount"], 1)
+
+    def test_simplified_packed_outline_is_not_mapping_drift(self):
+        item = _item(
+            "a",
+            [
+                [0, 0], [5, 0], [10, -0.8], [15, 0], [20, 0],
+                [20, 5], [20, 10], [20, 15], [20, 20],
+                [15, 20], [10, 20], [5, 20], [0, 20],
+                [0, 15], [0, 10], [0, 5],
+            ],
+        )
+        layout = _layout([(item, 10, 10, 0)])
+        layout["placements"][0]["packedOutline"] = [
+            [10, 10.8], [30, 10.8], [30, 30.8], [10, 30.8], [10, 10.8]
+        ]
+        result = validate_layout(layout, [item], _params())
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["mappingWarningCount"], 0)
+
+    def test_real_brep_broadphase_only_returns_3d_overlaps(self):
+        bounds = {
+            0: {"minX": 0, "minY": 0, "minZ": 0, "maxX": 20, "maxY": 20, "maxZ": 2},
+            1: {"minX": 10, "minY": 10, "minZ": 0, "maxX": 30, "maxY": 30, "maxZ": 2},
+            2: {"minX": 10, "minY": 10, "minZ": 3, "maxX": 30, "maxY": 30, "maxZ": 5},
+            3: {"minX": 40, "minY": 40, "minZ": 0, "maxX": 50, "maxY": 50, "maxZ": 2},
+        }
+        self.assertEqual(_broadphase_pairs_3d(bounds), [(0, 1)])
+
+    def test_real_brep_detects_overlap_missed_by_cached_outlines(self):
+        a, b = _rect("a", 10, 10), _rect("b", 10, 10)
+        # Actual bodies are 20x20 mm while stale cached outlines are 10x10 mm.
+        a["tempBody"] = _Body((0, 0, 0, 2, 2, 1))
+        b["tempBody"] = _Body((0, 0, 0, 2, 2, 1))
+        layout = _layout([(a, 0, 0, 0), (b, 15, 0, 0)])
+        polygon = validate_layout(layout, [a, b], _params())
+        self.assertTrue(polygon["ok"])
+        manager = _Manager()
+        import adsk.core
+        import adsk.fusion
+        with patch.object(adsk.fusion.TemporaryBRepManager, "get", return_value=manager), \
+             patch.object(adsk.core.Matrix3D, "create", side_effect=_Matrix), \
+             patch.object(
+                 adsk.core.Vector3D,
+                 "create",
+                 side_effect=lambda x, y, z: _Point(x, y, z),
+             ):
+            result = validate_fusion_exact(layout, [a, b], _params(), polygon)
+        self.assertFalse(result["ok"])
+        self.assertGreaterEqual(result["mappingWarningCount"], 2)
+        self.assertTrue(
+            any(collision.get("source") == "temporaryBRep" for collision in result["collisions"])
+        )
 
     def test_child_in_hole_with_spacing_is_legal(self):
         parent = _item(

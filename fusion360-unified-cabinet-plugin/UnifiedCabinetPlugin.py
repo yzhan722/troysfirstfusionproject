@@ -51,6 +51,7 @@ def _ensure_paths(plugin_dir):
         os.path.join(plugin_dir, "modules", "relationships"),
         os.path.join(plugin_dir, "panel_attributes"),
         os.path.join(plugin_dir, "metadata"),
+        os.path.join(plugin_dir, "presets"),
     ]
     for path in paths:
         if path not in sys.path:
@@ -164,6 +165,8 @@ class UnifiedCabinetPluginApp:
             "relationships.runDemoFixtureFlow": connect_demo.run_demo_fixture_flow,
             "relationships.runDemoNegativeReport": connect_demo.run_demo_negative_report,
             "relationships.runDemoPackOffline": connect_demo.run_demo_pack_offline,
+            "presets.loadLibrary": tools.load_preset_library,
+            "presets.saveLibrary": tools.save_preset_library,
             "panelAttributes.searchPanels": panel_attributes.search_panels,
             "panelAttributes.selectByTag": panel_attributes.select_by_tag,
             "panelAttributes.selectPanel": panel_attributes.select_panel,

@@ -404,7 +404,6 @@ def run_demo_3_negative_filtering(rule: Optional[Dict[str, Any]] = None) -> Dict
         ("gap_parallel_001", "REL_GAP_A", "REL_GAP_B"),
         ("intersection_collision_001", "REL_COLLISION_A", "REL_COLLISION_B"),
         ("no_contact_001", "REL_NONE_A", "REL_NONE_B"),
-        ("surface_to_surface_001", "REL_SURFACE_A", "REL_SURFACE_B2"),
     ]
 
     case_results: List[Dict[str, Any]] = []

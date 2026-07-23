@@ -81,6 +81,8 @@ export interface Style1SystemConfig {
   style: "style_1";
   frontRailHeight?: number;
   insertSlotThickness?: number;
+  /** When true, cut LED T-slot on the Style 1 insert board (T3 top / B3 bottom). */
+  ledGroove?: boolean;
 }
 
 export interface Style2SystemConfig {
@@ -228,14 +230,48 @@ export interface T3DrillHoleFeature {
   notes?: string[];
 }
 
+export interface LedGrooveSegment {
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+}
+
 export interface B3GrooveFeature {
   id: string;
   type: "b3_groove";
   targetBoardId: "B3";
+  face: "bottom";
   width: number;
   depth: number;
+  frontOffset: number;
   branchCount: number;
+  /** Length of each rear T-branch along +Y (mm); runs to the board back edge. */
+  branchLength: number;
+  /** Cross-section width of each T-branch (mm); same as main channel width. */
   branchWidth: number;
+  /** Distance from each board X end to branch centerline (mm). */
+  branchEndInset: number;
+  main: LedGrooveSegment;
+  branches: LedGrooveSegment[];
+  source: string;
+  notes?: string[];
+}
+
+export interface T3GrooveFeature {
+  id: string;
+  type: "t3_groove";
+  targetBoardId: "T3";
+  face: "top";
+  width: number;
+  depth: number;
+  frontOffset: number;
+  branchCount: number;
+  branchLength: number;
+  branchWidth: number;
+  branchEndInset: number;
+  main: LedGrooveSegment;
+  branches: LedGrooveSegment[];
   source: string;
   notes?: string[];
 }
@@ -276,6 +312,7 @@ export type BoardFeature =
   | H34ClearanceSlotFeature
   | T3DrillHoleFeature
   | B3GrooveFeature
+  | T3GrooveFeature
   | B3DrillHoleFeature
   | DividerTongueFeature;
 

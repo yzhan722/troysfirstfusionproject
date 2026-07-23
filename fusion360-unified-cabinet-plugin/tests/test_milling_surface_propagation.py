@@ -217,7 +217,7 @@ class AnalyzeMillingSurfacesTests(unittest.TestCase):
             "warnings": [],
         }
         try:
-            roles = prop._half_slot_surface_roles(body, surface_a, surface_b)
+            roles = self._orig_slot(body, surface_a, surface_b)
             self.assertEqual(roles, ["NON_MILLING", "MILLING"])
         finally:
             prop._extract_half_features = orig_extract

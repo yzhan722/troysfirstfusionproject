@@ -42,8 +42,11 @@ const ZI_HALF_FRONT_NOTCH_DEPTH = 45;
 const ZI_HALF_DEPTH = 150;
 const B3_GROOVE_WIDTH = 14.5;
 const B3_GROOVE_DEPTH = 6.5;
-const B3_GROOVE_BRANCH_COUNT = 2;
-const B3_GROOVE_BRANCH_WIDTH = 20;
+/** Clear strip from board front edge to near wall of main channel. */
+const LED_GROOVE_FRONT_LAND_MM = 18;
+/** Centerline from front = land + half groove width (25.25). */
+const LED_GROOVE_FRONT_OFFSET = LED_GROOVE_FRONT_LAND_MM + B3_GROOVE_WIDTH / 2;
+const LED_GROOVE_BRANCH_END_INSET = 80;
 // Zi slot height in the V stiles = mating board thickness + 1mm clearance
 // (computed per board; was a fixed 16 = 15 + 1).
 const ZI_SLOT_CLEARANCE = 1;
@@ -375,21 +378,24 @@ function addVerticalBoards(
 ): void {
   const pt = debug.panelThickness;
   const cabinetWidth = Number(params.cabinetWidth);
+  const lspT = debug.leftSidePanelThickness;
   const rspT = debug.rightSidePanelThickness;
   const fpt = debug.frontFaceAllowance;
   const midDepth = debug.midDepth;
   const carcassY0 = fpt;
   const carcassY1 = fpt + midDepth;
   const rearY0 = carcassY0 + Math.max(0, midDepth - 150);
-  // V stiles share the side-panel X slab in absolute cabinet coordinates.
-  // Left pair sits on 0..pt; right pair mirrors SidePanel_R at cw-rspT..cw-rspT+pt.
-  const rightV0 = rspT > 0 ? cabinetWidth - rspT : cabinetWidth - pt;
-  const rightV1 = rspT > 0 ? cabinetWidth - rspT + pt : cabinetWidth;
+  // Middle-first model: build the insert carcass, then hang side panels outside.
+  // V stiles sit on the middle outer faces (inboard of any side-panel skin).
+  const leftV0 = lspT;
+  const leftV1 = lspT + pt;
+  const rightV0 = cabinetWidth - rspT - pt;
+  const rightV1 = cabinetWidth - rspT;
 
   boards.push(
     board("V1", "V1", "vertical_structure", "V1", pt, "YZ", "X", {
-      x0: 0,
-      x1: pt,
+      x0: leftV0,
+      x1: leftV1,
       y0: carcassY0,
       y1: carcassY1,
       z0: 0,
@@ -412,8 +418,8 @@ function addVerticalBoards(
       "YZ",
       "X",
       {
-        x0: 0,
-        x1: pt,
+        x0: leftV0,
+        x1: leftV1,
         y0: rearY0,
         y1: carcassY1,
         z0: 0,
@@ -649,9 +655,8 @@ function applyCoreBoardXOffset(
   void params;
   for (const item of boards) {
     if (item.category === "side_panel" || item.category === "avoidance_support") continue;
-    // V stiles never follow the side-panel offset: they share the side panels'
-    // X slab in every style combo (the former style_2 exception pushed them
-    // 16mm inboard, which was wrong).
+    // V stiles are already placed in absolute coords on the middle outer faces
+    // (inboard of side-panel skins). Do not shift them again.
     if (["V1", "V2", "V3", "V4"].includes(item.id)) continue;
     item.x0 += dx;
     item.x1 += dx;
@@ -687,7 +692,7 @@ function updateSidePanelOverlapAudit(
   for (const sidePanel of sidePanels) {
     const verticalId = sidePanel.id === "SidePanel_L" ? "V1" : "V2";
     const verticalBoard = verticalBoards.find((item) => item.id === verticalId);
-    if (!verticalBoard || !sharesXSlab(sidePanel, verticalBoard)) continue;
+    if (!verticalBoard) continue;
     const expectedFrontY = -fpt;
     const expectedCarcassY0 = fpt;
     if (Math.abs(sidePanel.y0 - expectedFrontY) > 0.01) {
@@ -698,6 +703,12 @@ function updateSidePanelOverlapAudit(
     if (Math.abs(verticalBoard.y0 - expectedCarcassY0) > 0.01) {
       validation?.warnings.push(
         `${verticalId} y0 ${verticalBoard.y0} differs from expected carcass start ${expectedCarcassY0} (FPT ${fpt}).`,
+      );
+    }
+    // Outer-skin model: side panel and V should be adjacent in X, not coplanar.
+    if (sharesXSlab(sidePanel, verticalBoard)) {
+      validation?.warnings.push(
+        `${sidePanel.id} still shares the X slab with ${verticalId}; expected middle-first outer-skin placement.`,
       );
     }
   }
@@ -718,12 +729,12 @@ function updateSidePanelOverlapAudit(
           verticalBoardId: verticalBoard.id as VerticalBoardId,
           overlaps,
           note: overlaps
-            ? "Overlap is visible and expected in current inner-width model; non-fatal."
-            : "No overlap detected.",
+            ? "Unexpected: side panel should sit outside the middle carcass, not share the V X slab."
+            : "No overlap (middle-first outer-skin model).",
         };
       })
     ),
-    note: "V stiles share the side-panel X slab (0..pt left, cw-rspT..cw right); core boards use inner span offset.",
+    note: "Middle-first model: V on middle outer faces; side panels are outer skins (adjacent in X).",
   };
 }
 
@@ -1291,7 +1302,6 @@ function addStyle1BottomSystemBoards(
       z1: frontRailHeight + debug.panelThickness,
     }, "bottom_system", [
       "Style 1 bottom inserted board",
-      "B3 groove placeholder remains feature-only",
     ]),
   );
 }
@@ -1323,7 +1333,6 @@ function addStyle1InsertBoardProfileVectors(boards: Board[], debug: GeneralTallC
     b3.notes = [
       "Style 1 bottom inserted board",
       "Exact Style 1 B3 notched profileVector implemented",
-      "B3 groove placeholder remains feature-only; exact path deferred",
     ];
   }
 }
@@ -2787,22 +2796,133 @@ function addVerticalDividerH34ClearanceProfiles(
   }
 }
 
-function generateStyle1T3B3FeaturePlaceholders(boards: Board[]): BoardFeature[] {
-  const features: BoardFeature[] = [];
-  const b3 = boards.find((board) => board.id === "B3" && board.boardType === "B3");
-  if (!b3) return features;
+function buildInsertBoardLedGroovePath(
+  board: Board,
+  warnings: string[],
+): {
+  main: { x0: number; x1: number; y0: number; y1: number };
+  branches: Array<{ x0: number; x1: number; y0: number; y1: number }>;
+  branchLength: number;
+} | null {
+  const halfWidth = B3_GROOVE_WIDTH / 2;
+  // Local offsets from the board origin (front = y0 / doors). Fusion maps
+  // these through the live board bbox after applyCoreBoardXOffset.
+  const boardWidth = board.x1 - board.x0;
+  const boardDepth = board.y1 - board.y0;
+  if (boardWidth <= LED_GROOVE_BRANCH_END_INSET * 2 + B3_GROOVE_WIDTH) {
+    warnings.push(
+      `${board.id} LED groove skipped: board width ${boardWidth.toFixed(1)} too narrow for 80 mm end insets.`,
+    );
+    return null;
+  }
+  const mainYCenter = LED_GROOVE_FRONT_OFFSET;
+  const main = {
+    x0: 0,
+    x1: boardWidth,
+    y0: mainYCenter - halfWidth,
+    y1: mainYCenter + halfWidth,
+  };
+  if (main.y0 < -1e-6 || main.y1 > boardDepth + 1e-6) {
+    warnings.push(
+      `${board.id} LED groove main channel y=${main.y0.toFixed(2)}..${main.y1.toFixed(2)} leaves board depth ${boardDepth.toFixed(1)}.`,
+    );
+  }
+  // Branches run from the main channel rear edge all the way to the board
+  // back edge (Y+ / cabinet interior), not a fixed stub length.
+  const branchY0 = main.y1;
+  const branchY1 = boardDepth;
+  const branchLength = branchY1 - branchY0;
+  if (branchLength <= 1e-6) {
+    warnings.push(
+      `${board.id} LED groove T-branches skipped: no remaining depth behind main channel (y=${branchY0.toFixed(2)}).`,
+    );
+    return null;
+  }
+  const branchCenters = [
+    LED_GROOVE_BRANCH_END_INSET,
+    boardWidth - LED_GROOVE_BRANCH_END_INSET,
+  ];
+  const branches = branchCenters.map((centerX) => ({
+    x0: centerX - halfWidth,
+    x1: centerX + halfWidth,
+    y0: branchY0,
+    y1: branchY1,
+  }));
+  return { main, branches, branchLength };
+}
 
-  features.push({
-    id: "B3_groove_placeholder",
-    type: "b3_groove",
-    targetBoardId: "B3",
-    width: B3_GROOVE_WIDTH,
-    depth: B3_GROOVE_DEPTH,
-    branchCount: B3_GROOVE_BRANCH_COUNT,
-    branchWidth: B3_GROOVE_BRANCH_WIDTH,
-    source: "B3",
-    notes: ["B3 connected groove placeholder", "Exact connected groove path deferred"],
-  });
+function generateStyle1LedGrooveFeatures(
+  boards: Board[],
+  validation: GeneratorValidation,
+  params: GeneralTallCabinetParams,
+): BoardFeature[] {
+  const features: BoardFeature[] = [];
+  const topLed = params.topSystem.style === "style_1" && params.topSystem.ledGroove !== false;
+  const bottomLed = params.bottomSystem.style === "style_1" && params.bottomSystem.ledGroove !== false;
+
+  const b3 = boards.find((board) => board.id === "B3" && board.boardType === "B3");
+  if (b3 && bottomLed) {
+    const path = buildInsertBoardLedGroovePath(b3, validation.warnings);
+    if (path) {
+      features.push({
+        id: "B3_led_groove",
+        type: "b3_groove",
+        targetBoardId: "B3",
+        face: "bottom",
+        width: B3_GROOVE_WIDTH,
+        depth: B3_GROOVE_DEPTH,
+        frontOffset: LED_GROOVE_FRONT_OFFSET,
+        branchCount: path.branches.length,
+        branchLength: path.branchLength,
+        branchWidth: B3_GROOVE_WIDTH,
+        branchEndInset: LED_GROOVE_BRANCH_END_INSET,
+        main: path.main,
+        branches: path.branches,
+        source: "B3",
+        notes: [
+          "B3 LED groove on bottom face",
+          "Main channel along X, 18 mm land from front then 14.5 mm groove (centerline 25.25 mm)",
+          "Two rear T-branches parallel to Y, extend to board back edge, centers inset 80 mm from each X end",
+        ],
+      });
+      b3.notes = [
+        ...(b3.notes ?? []).filter((note) => !note.toLowerCase().includes("groove placeholder")),
+        "B3 LED groove path implemented on bottom face",
+      ];
+    }
+  }
+
+  const t3 = boards.find((board) => board.id === "T3" && board.boardType === "T3");
+  if (t3 && topLed) {
+    const path = buildInsertBoardLedGroovePath(t3, validation.warnings);
+    if (path) {
+      features.push({
+        id: "T3_led_groove",
+        type: "t3_groove",
+        targetBoardId: "T3",
+        face: "top",
+        width: B3_GROOVE_WIDTH,
+        depth: B3_GROOVE_DEPTH,
+        frontOffset: LED_GROOVE_FRONT_OFFSET,
+        branchCount: path.branches.length,
+        branchLength: path.branchLength,
+        branchWidth: B3_GROOVE_WIDTH,
+        branchEndInset: LED_GROOVE_BRANCH_END_INSET,
+        main: path.main,
+        branches: path.branches,
+        source: "T3",
+        notes: [
+          "T3 LED groove on top face",
+          "Main channel along X, 18 mm land from front then 14.5 mm groove (centerline 25.25 mm)",
+          "Two rear T-branches parallel to Y, extend to board back edge, centers inset 80 mm from each X end",
+        ],
+      });
+      t3.notes = [
+        ...(t3.notes ?? []),
+        "T3 LED groove path implemented on top face",
+      ];
+    }
+  }
 
   return features;
 }
@@ -3623,7 +3743,7 @@ export function generateGeneralTallCabinet(inputParams: GeneralTallCabinetParams
     ...ziGrooveFeatures,
     ...generateDividerTongueFeatures(boards, ziGrooveFeatures, debug, validation),
     ...generateH34ClearanceSlotFeatures(boards, debug, validation),
-    ...generateStyle1T3B3FeaturePlaceholders(boards),
+    ...generateStyle1LedGrooveFeatures(boards, validation, params),
   ];
   addVerticalDividerH34ClearanceProfiles(boards, features, debug, validation);
   addVBoardSideProfileSkeletons(boards, features, params, debug, validation, avoidance);

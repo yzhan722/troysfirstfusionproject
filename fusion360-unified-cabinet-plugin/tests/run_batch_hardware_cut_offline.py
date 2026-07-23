@@ -111,7 +111,7 @@ def main() -> int:
         "connectUiRepairHint",
         "connect-skip-repair-btn",
         "relationships.inspectPair",
-        "跳过 / 手修列表",
+        "跳过与手修列表",
     ):
         if token not in palette:
             return _fail("palette repair missing", token)

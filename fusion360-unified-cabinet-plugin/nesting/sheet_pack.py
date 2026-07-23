@@ -1,24 +1,26 @@
-"""Sheet packing: multi-bin Bottom-Left-Fill nesting with short local search.
+"""Fast hybrid sheet packing for cabinet panels.
 
-Phase A used AABB only. Phase B uses true-shape polygons when ``outline.points``
-is present (concave nesting into notches), with rectangle fallback otherwise.
-
-Phase C (BLF): richer corner/hole candidates, left/down gravity slide, fixed
-budget order swaps to cut sheet count without a global optimality hunt.
+MaxRects/BSSF free rectangles provide a cheap placement shortlist. True-shape
+polygon checks, a sheet-local spatial grid, and a bounded BLF compaction pass
+preserve concave/notched behavior without the old 50-part AABB-only downgrade.
 """
 
 from __future__ import annotations
 
 import random
+import hashlib
+import math
 
 try:
     from nesting.outline import (
         build_outline_payload,
         oriented_outline,
+        point_in_polygon,
         polygon_area,
         polygon_bounds,
         polygons_too_close,
         rectangle_polygon,
+        rotate_polygon,
         simplify_ring,
         translate_polygon,
     )
@@ -26,10 +28,12 @@ except Exception:
     from outline import (
         build_outline_payload,
         oriented_outline,
+        point_in_polygon,
         polygon_area,
         polygon_bounds,
         polygons_too_close,
         rectangle_polygon,
+        rotate_polygon,
         simplify_ring,
         translate_polygon,
     )
@@ -39,7 +43,7 @@ DEFAULT_SHEET_HEIGHT_MM = 1220.0
 DEFAULT_BORDER_MM = 15.0
 DEFAULT_SPACING_MM = 12.0
 DEFAULT_SHEET_GAP_MM = 100.0
-ENGINE_NAME = "sheet_pack_poly_v2"
+ENGINE_NAME = "sheet_pack_hybrid_v3"
 
 # Cap candidate explosion on dense sheets (still prefer bottom-left order).
 MAX_CANDIDATE_POINTS = 240
@@ -50,8 +54,11 @@ SLIDE_TOLERANCE_MM = 1.5
 # Pack-time outline density cap (true-shape fidelity vs freeze risk).
 PACK_OUTLINE_MAX_POINTS = 32
 PACK_OUTLINE_TOLERANCE_MM = 1.0
-# Above this part count per material job: AABB-only, no slide/consolidate.
+# Above this part count per material job: keep exact nearby polygon checks, but
+# skip expensive gravity sliding and use a tighter deterministic search budget.
 FAST_PACK_PART_THRESHOLD = 50
+SPATIAL_CELL_MM = 300.0
+MAX_FREE_RECT_CANDIDATES = 48
 
 
 def _num(value, default=0.0):
@@ -100,6 +107,11 @@ def normalize_sheet_params(sheet_params):
         "sheetGapMm": max(
             _num(raw.get("sheetGapMm"), DEFAULT_SHEET_GAP_MM),
             0.0,
+        ),
+        "layoutWidthMm": max(_num(raw.get("layoutWidthMm"), 0.0), 0.0),
+        "qualityTimeLimitSec": max(
+            _num(raw.get("qualityTimeLimitSec"), 30.0),
+            1.0,
         ),
     }
 
@@ -173,11 +185,36 @@ def _item_outline_points(item):
     )
 
 
+def _item_is_rectangle(item):
+    points = _item_outline_points(item)
+    opened = points[:-1] if len(points) > 1 and points[0] == points[-1] else points
+    if len(opened) != 4:
+        return False
+    bounds = polygon_bounds(points)
+    bbox_area = float(bounds["widthMm"]) * float(bounds["depthMm"])
+    return abs(polygon_area(points) - bbox_area) <= max(1e-6, bbox_area * 1e-6)
+
+
 def _oriented_part(item, rotation_deg):
     points = _item_outline_points(item)
     oriented, bounds = oriented_outline(points, rotation_deg)
+    holes = []
+    raw_outline = item.get("outline") if isinstance(item.get("outline"), dict) else {}
+    for raw_hole in raw_outline.get("holes") or []:
+        record = raw_hole if isinstance(raw_hole, dict) else {"points": raw_hole}
+        if str(record.get("cutType") or "FULL").upper() != "FULL":
+            continue
+        ring = record.get("points") or []
+        if len(ring) < 4:
+            continue
+        rotated = rotate_polygon(ring, rotation_deg)
+        holes.append(
+            translate_polygon(rotated, -bounds["minX"], -bounds["minY"])
+        )
     return {
         "points": oriented,
+        "holes": holes,
+        "isRectangle": _item_is_rectangle(item),
         "bounds": bounds,
         "widthMm": bounds["widthMm"],
         "depthMm": bounds["depthMm"],
@@ -197,18 +234,153 @@ def _bounds_expand(bounds, pad):
 
 def _bounds_overlap(a, b):
     return not (
-        a["maxX"] < b["minX"]
-        or b["maxX"] < a["minX"]
-        or a["maxY"] < b["minY"]
-        or b["maxY"] < a["minY"]
+        a["maxX"] <= b["minX"] + 1e-9
+        or b["maxX"] <= a["minX"] + 1e-9
+        or a["maxY"] <= b["minY"] + 1e-9
+        or b["maxY"] <= a["minY"] + 1e-9
     )
 
 
-def _candidate_points(placed, border, spacing):
+class _SpatialIndex:
+    """Small uniform grid broad phase for one physical sheet."""
+
+    def __init__(self, cell_size=SPATIAL_CELL_MM):
+        self.cell_size = max(float(cell_size), 1.0)
+        self.cells = {}
+
+    def _keys(self, bounds):
+        min_x = int(float(bounds["minX"]) // self.cell_size)
+        max_x = int(float(bounds["maxX"]) // self.cell_size)
+        min_y = int(float(bounds["minY"]) // self.cell_size)
+        max_y = int(float(bounds["maxY"]) // self.cell_size)
+        for gx in range(min_x, max_x + 1):
+            for gy in range(min_y, max_y + 1):
+                yield (gx, gy)
+
+    def add(self, entry):
+        bounds = entry.get("bounds") or polygon_bounds(entry.get("points") or [])
+        for key in self._keys(bounds):
+            self.cells.setdefault(key, []).append(entry)
+
+    def query(self, bounds):
+        found = []
+        seen = set()
+        for key in self._keys(bounds):
+            for entry in self.cells.get(key, ()):
+                marker = id(entry)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                found.append(entry)
+        return found
+
+
+def _rect_intersection(a, b):
+    x0 = max(float(a["x"]), float(b["x"]))
+    y0 = max(float(a["y"]), float(b["y"]))
+    x1 = min(float(a["x"]) + float(a["w"]), float(b["x"]) + float(b["w"]))
+    y1 = min(float(a["y"]) + float(a["h"]), float(b["y"]) + float(b["h"]))
+    if x1 <= x0 + 1e-9 or y1 <= y0 + 1e-9:
+        return None
+    return {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0}
+
+
+def _rect_contains(outer, inner):
+    return (
+        float(inner["x"]) >= float(outer["x"]) - 1e-9
+        and float(inner["y"]) >= float(outer["y"]) - 1e-9
+        and float(inner["x"]) + float(inner["w"])
+        <= float(outer["x"]) + float(outer["w"]) + 1e-9
+        and float(inner["y"]) + float(inner["h"])
+        <= float(outer["y"]) + float(outer["h"]) + 1e-9
+    )
+
+
+def _prune_free_rectangles(rectangles):
+    usable = [
+        rect
+        for rect in rectangles
+        if float(rect["w"]) > 1e-6 and float(rect["h"]) > 1e-6
+    ]
+    pruned = []
+    for index, rect in enumerate(usable):
+        if any(
+            index != other_index and _rect_contains(other, rect)
+            for other_index, other in enumerate(usable)
+        ):
+            continue
+        pruned.append(rect)
+    return pruned
+
+
+def _split_free_rectangles(free_rectangles, used):
+    """Classic MaxRects split; AABB free space is only a candidate shortlist."""
+    output = []
+    ux0 = float(used["x"])
+    uy0 = float(used["y"])
+    ux1 = ux0 + float(used["w"])
+    uy1 = uy0 + float(used["h"])
+    for free in free_rectangles:
+        if _rect_intersection(free, used) is None:
+            output.append(free)
+            continue
+        fx0 = float(free["x"])
+        fy0 = float(free["y"])
+        fx1 = fx0 + float(free["w"])
+        fy1 = fy0 + float(free["h"])
+        if ux0 > fx0 + 1e-9:
+            output.append({"x": fx0, "y": fy0, "w": ux0 - fx0, "h": fy1 - fy0})
+        if ux1 < fx1 - 1e-9:
+            output.append({"x": ux1, "y": fy0, "w": fx1 - ux1, "h": fy1 - fy0})
+        if uy0 > fy0 + 1e-9:
+            output.append({"x": fx0, "y": fy0, "w": fx1 - fx0, "h": uy0 - fy0})
+        if uy1 < fy1 - 1e-9:
+            output.append({"x": fx0, "y": uy1, "w": fx1 - fx0, "h": fy1 - uy1})
+    return _prune_free_rectangles(output)
+
+
+def _maxrects_candidates(free_rectangles, width, height):
+    scored = []
+    for rect in free_rectangles or []:
+        rw = float(rect["w"])
+        rh = float(rect["h"])
+        if width > rw + 1e-9 or height > rh + 1e-9:
+            continue
+        short_fit = min(rw - width, rh - height)
+        long_fit = max(rw - width, rh - height)
+        area_fit = rw * rh - width * height
+        scored.append(
+            (
+                short_fit,
+                long_fit,
+                area_fit,
+                float(rect["y"]),
+                float(rect["x"]),
+            )
+        )
+    return [
+        (score[4], score[3])
+        for score in sorted(scored)[:MAX_FREE_RECT_CANDIDATES]
+    ]
+
+
+def _candidate_points(
+    placed,
+    border,
+    spacing,
+    free_rectangles=None,
+    width=0.0,
+    height=0.0,
+    rich=True,
+):
     """Bottom-left-fill style candidates: corners, vertices, pairwise holes."""
     points = [(border, border)]
+    points.extend(_maxrects_candidates(free_rectangles, width, height))
+    if not rich:
+        return sorted(set(points), key=lambda point: (point[1], point[0]))
     boxes = []
-    for entry in placed:
+    candidate_entries = placed if len(placed) <= 48 else placed[-32:]
+    for entry in candidate_entries:
         px = float(entry["x"])
         py = float(entry["y"])
         pw = float(entry["w"])
@@ -225,9 +397,19 @@ def _candidate_points(placed, border, spacing):
         for vx, vy in ring[::step]:
             points.append((float(vx) + spacing, float(vy)))
             points.append((float(vx), float(vy) + spacing))
+        for hole in entry.get("holes") or []:
+            hole_bounds = polygon_bounds(hole)
+            points.append(
+                (
+                    float(hole_bounds["minX"]) + spacing,
+                    float(hole_bounds["minY"]) + spacing,
+                )
+            )
 
     # Pairwise BLF corners: right-of-A × top-of-B (and swap) fill rectangular holes.
-    box_limit = min(len(boxes), 48)
+    # Pairwise holes help small jobs but dominate candidate counts on 100–200
+    # panel cabinets. MaxRects + shape vertices are sufficient past 40 placed.
+    box_limit = min(len(boxes), 16) if len(boxes) <= 40 else 0
     for i in range(box_limit):
         _ax, _ay, ar, at = boxes[i]
         for j in range(box_limit):
@@ -241,27 +423,79 @@ def _candidate_points(placed, border, spacing):
         set((round(float(x), 3), round(float(y), 3)) for x, y in points),
         key=lambda p: (p[1], p[0]),
     )
-    if len(unique) <= MAX_CANDIDATE_POINTS:
+    candidate_limit = 80 if len(placed) > 40 else MAX_CANDIDATE_POINTS
+    if len(unique) <= candidate_limit:
         return unique
     # Keep densest bottom-left band, then evenly sample the rest for hole fill.
-    head = unique[: MAX_CANDIDATE_POINTS // 2]
-    tail = unique[MAX_CANDIDATE_POINTS // 2 :]
-    step = max(len(tail) // max(MAX_CANDIDATE_POINTS - len(head), 1), 1)
-    sampled = tail[::step][: MAX_CANDIDATE_POINTS - len(head)]
+    head = unique[: candidate_limit // 2]
+    tail = unique[candidate_limit // 2 :]
+    step = max(len(tail) // max(candidate_limit - len(head), 1), 1)
+    sampled = tail[::step][: candidate_limit - len(head)]
     return head + sampled
 
 
-def _placement_conflicts(world, placed, spacing, world_bounds=None, aabb_only=False):
+def _inside_hole_with_spacing(world, holes, spacing):
+    def point_segment_distance(point, start, end):
+        px, py = float(point[0]), float(point[1])
+        ax, ay = float(start[0]), float(start[1])
+        bx, by = float(end[0]), float(end[1])
+        dx, dy = bx - ax, by - ay
+        length_sq = dx * dx + dy * dy
+        if length_sq <= 1e-12:
+            return math.hypot(px - ax, py - ay)
+        t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length_sq))
+        return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+    def boundary_distance(a, b):
+        best = float("inf")
+        for index in range(len(a) - 1):
+            a0, a1 = a[index], a[index + 1]
+            for other_index in range(len(b) - 1):
+                b0, b1 = b[other_index], b[other_index + 1]
+                best = min(
+                    best,
+                    point_segment_distance(a0, b0, b1),
+                    point_segment_distance(a1, b0, b1),
+                    point_segment_distance(b0, a0, a1),
+                    point_segment_distance(b1, a0, a1),
+                )
+        return best
+
+    for hole in holes or []:
+        if not hole:
+            continue
+        if not all(point_in_polygon(point, hole) for point in world[:-1]):
+            continue
+        if boundary_distance(world, hole) + 1e-6 < spacing:
+            continue
+        return True
+    return False
+
+
+def _placement_conflicts(
+    world,
+    placed,
+    spacing,
+    world_bounds=None,
+    aabb_only=False,
+    spatial_index=None,
+    candidate_is_rectangle=False,
+):
     if world_bounds is None:
         world_bounds = polygon_bounds(world)
     probe = _bounds_expand(world_bounds, spacing)
-    for entry in placed:
+    candidates = spatial_index.query(probe) if spatial_index is not None else placed
+    for entry in candidates:
         other_bounds = entry.get("bounds")
         if other_bounds is None:
             other_bounds = polygon_bounds(entry["points"])
         if not _bounds_overlap(probe, other_bounds):
             continue
+        if _inside_hole_with_spacing(world, entry.get("holes"), spacing):
+            continue
         if aabb_only:
+            return True
+        if candidate_is_rectangle and entry.get("isRectangle"):
             return True
         if polygons_too_close(world, entry["points"], spacing):
             return True
@@ -290,6 +524,8 @@ def _slide_left_down(
     border,
     spacing,
     aabb_only=False,
+    spatial_index=None,
+    candidate_is_rectangle=False,
 ):
     """Gravity-tighten a feasible placement toward bottom-left."""
 
@@ -311,6 +547,8 @@ def _slide_left_down(
             spacing,
             world_bounds=world_bounds,
             aabb_only=aabb_only,
+            spatial_index=spatial_index,
+            candidate_is_rectangle=candidate_is_rectangle,
         )
 
     best_x, best_y = x, y
@@ -337,57 +575,129 @@ def _slide_left_down(
 
 
 def _bottom_left_fit_polygon(
-    placed, part, sheet_w, sheet_h, border, spacing, aabb_only=False, allow_slide=True
+    placed,
+    part,
+    sheet_w,
+    sheet_h,
+    border,
+    spacing,
+    aabb_only=False,
+    allow_slide=True,
+    spatial_index=None,
+    free_rectangles=None,
+    prefer_maxrects=False,
 ):
     width = float(part["widthMm"])
     height = float(part["depthMm"])
     if width > sheet_w - 2.0 * border + 1e-9 or height > sheet_h - 2.0 * border + 1e-9:
         return None
     local_points = part["points"]
-    for x, y in _candidate_points(placed, border, spacing):
-        if not _in_sheet(x, y, width, height, sheet_w, sheet_h, border):
-            continue
-        world = translate_polygon(local_points, x, y)
-        world_bounds = {
-            "minX": x,
-            "minY": y,
-            "maxX": x + width,
-            "maxY": y + height,
-            "widthMm": width,
-            "depthMm": height,
-        }
-        if _placement_conflicts(
-            world, placed, spacing, world_bounds=world_bounds, aabb_only=aabb_only
-        ):
-            continue
-        if not allow_slide:
-            return (x, y, world)
-        sx, sy, slid = _slide_left_down(
-            placed,
-            local_points,
-            x,
-            y,
-            width,
-            height,
-            sheet_w,
-            sheet_h,
-            border,
-            spacing,
-            aabb_only=aabb_only,
-        )
-        return (sx, sy, slid)
+    if prefer_maxrects and free_rectangles:
+        for x, y in _maxrects_candidates(free_rectangles, width, height):
+            if _in_sheet(x, y, width, height, sheet_w, sheet_h, border):
+                # MaxRects free space is carved from spacing-inflated occupied
+                # AABBs, so this is a conservative true-shape-safe placement.
+                return (x, y, translate_polygon(local_points, x, y))
+    if (prefer_maxrects or len(placed) >= 40) and free_rectangles:
+        # Dense sheets: a BSSF free-rectangle candidate is AABB-safe by
+        # construction. Only fall back to polygon/vertex candidates when none
+        # of those candidates can be used.
+        candidate_sets = [
+            _maxrects_candidates(free_rectangles, width, height),
+            _candidate_points(
+                placed,
+                border,
+                spacing,
+                free_rectangles=None,
+                width=width,
+                height=height,
+                rich=not aabb_only,
+            ),
+        ]
+    else:
+        candidate_sets = [
+            _candidate_points(
+                placed,
+                border,
+                spacing,
+                free_rectangles=free_rectangles,
+                width=width,
+                height=height,
+                rich=not aabb_only,
+            )
+        ]
+    for candidates in candidate_sets:
+        for x, y in candidates:
+            if not _in_sheet(x, y, width, height, sheet_w, sheet_h, border):
+                continue
+            world = translate_polygon(local_points, x, y)
+            world_bounds = {
+                "minX": x,
+                "minY": y,
+                "maxX": x + width,
+                "maxY": y + height,
+                "widthMm": width,
+                "depthMm": height,
+            }
+            if _placement_conflicts(
+                world,
+                placed,
+                spacing,
+                world_bounds=world_bounds,
+                aabb_only=aabb_only,
+                spatial_index=spatial_index,
+                candidate_is_rectangle=bool(part.get("isRectangle")),
+            ):
+                continue
+            if not allow_slide:
+                return (x, y, world)
+            sx, sy, slid = _slide_left_down(
+                placed,
+                local_points,
+                x,
+                y,
+                width,
+                height,
+                sheet_w,
+                sheet_h,
+                border,
+                spacing,
+                aabb_only=aabb_only,
+                spatial_index=spatial_index,
+                candidate_is_rectangle=bool(part.get("isRectangle")),
+            )
+            return (sx, sy, slid)
     return None
 
 
-def _pack_bin(parts, sheet_w, sheet_h, border, spacing, rotations, aabb_only=False, allow_slide=True):
+def _pack_bin(
+    parts,
+    sheet_w,
+    sheet_h,
+    border,
+    spacing,
+    rotations,
+    aabb_only=False,
+    allow_slide=True,
+    allow_parts_in_part=False,
+    prefer_maxrects=False,
+):
     """Pack as many parts as possible onto one sheet. Returns (placed, remaining)."""
     placed = []
     placements = []
     remaining = []
+    spatial_index = _SpatialIndex()
+    free_rectangles = [{
+        "x": border,
+        "y": border,
+        "w": max(sheet_w - 2.0 * border, 0.0),
+        "h": max(sheet_h - 2.0 * border, 0.0),
+    }]
     for item in parts:
         best = None
+        oriented_cache = {}
         for rot in rotations:
-            oriented = _oriented_part(item, rot)
+            oriented = oriented_cache.setdefault(float(rot), _oriented_part(item, rot))
             if oriented["widthMm"] <= 0.0 or oriented["depthMm"] <= 0.0:
                 continue
             fit = _bottom_left_fit_polygon(
@@ -399,6 +709,9 @@ def _pack_bin(parts, sheet_w, sheet_h, border, spacing, rotations, aabb_only=Fal
                 spacing,
                 aabb_only=aabb_only,
                 allow_slide=allow_slide,
+                spatial_index=spatial_index,
+                free_rectangles=free_rectangles,
+                prefer_maxrects=prefer_maxrects,
             )
             if fit is None:
                 continue
@@ -427,15 +740,33 @@ def _pack_bin(parts, sheet_w, sheet_h, border, spacing, rotations, aabb_only=Fal
         if best is None:
             remaining.append(item)
             continue
-        placed.append(
+        placed_entry = {
+            "x": best["x"],
+            "y": best["y"],
+            "w": best["w"],
+            "h": best["h"],
+            "points": best["points"],
+            "holes": [
+                translate_polygon(hole, best["x"], best["y"])
+                for hole in oriented_cache[float(best["rotationDeg"])].get("holes") or []
+            ] if allow_parts_in_part else [],
+            "isRectangle": bool(
+                oriented_cache[float(best["rotationDeg"])].get("isRectangle")
+            ),
+            "bounds": best["bounds"],
+        }
+        placed.append(placed_entry)
+        spatial_index.add(placed_entry)
+        # Reserve spacing on every side so any future free-rectangle origin is
+        # conservative regardless of which side of the part it lands on.
+        free_rectangles = _split_free_rectangles(
+            free_rectangles,
             {
-                "x": best["x"],
-                "y": best["y"],
-                "w": best["w"],
-                "h": best["h"],
-                "points": best["points"],
-                "bounds": best["bounds"],
-            }
+                "x": best["x"] - spacing,
+                "y": best["y"] - spacing,
+                "w": best["w"] + 2.0 * spacing,
+                "h": best["h"] + 2.0 * spacing,
+            },
         )
         placements.append(
             {
@@ -447,19 +778,32 @@ def _pack_bin(parts, sheet_w, sheet_h, border, spacing, rotations, aabb_only=Fal
                 "rotationDeg": best["rotationDeg"],
                 "packedOutline": best["points"],
                 "packedAreaMm2": best["areaMm2"],
+                "isRectangle": bool(placed_entry["isRectangle"]),
+                "nestedInHole": any(
+                    _inside_hole_with_spacing(best["points"], entry.get("holes"), spacing)
+                    for entry in placed[:-1]
+                ) if allow_parts_in_part else False,
             }
         )
     return placements, remaining
 
 
 def _pack_score(sheets_out, unplaced):
-    """Lexicographic: fewer sheets, fewer unplaced, higher utilization."""
+    """Lexicographic: place everything, then minimize sheets/waste/extent."""
     sheet_count = len(sheets_out)
     unplaced_count = len(unplaced)
     util = 0.0
     if sheets_out:
         util = sum(float(s.get("utilization") or 0.0) for s in sheets_out) / sheet_count
-    return (sheet_count, unplaced_count, -util)
+    used_extent = 0.0
+    for sheet in sheets_out:
+        for placement in sheet.get("placements") or []:
+            used_extent = max(
+                used_extent,
+                float(placement.get("localY") or 0.0)
+                + float(placement.get("packedDepthMm") or 0.0),
+            )
+    return (unplaced_count, sheet_count, -util, used_extent)
 
 
 def _pack_job_ordered(ordered, sheet, params):
@@ -469,8 +813,12 @@ def _pack_job_ordered(ordered, sheet, params):
     spacing = float(params["spacingMm"])
     rotations = rotation_candidates(params)
     fast = len(ordered) >= FAST_PACK_PART_THRESHOLD
-    # Large material groups: AABB-only + no gravity slide (was ~65s for 200 parts).
-    aabb_only = fast
+    # Spatial broad phase keeps exact true-shape checks affordable for large jobs.
+    aabb_only = (
+        bool(ordered)
+        and not params.get("allowPartsInPart")
+        and all(_item_is_rectangle(item) for item in ordered)
+    )
     allow_slide = not fast
     if fast and params.get("allowRotation"):
         # Keep 0/90 only — enough for grain-ish boards without 4x search.
@@ -512,6 +860,8 @@ def _pack_job_ordered(ordered, sheet, params):
             rotations,
             aabb_only=aabb_only,
             allow_slide=allow_slide,
+            allow_parts_in_part=bool(params.get("allowPartsInPart")),
+            prefer_maxrects=fast,
         )
         if not placed:
             for item in fit_queue:
@@ -580,6 +930,7 @@ def _sheet_placed_boxes(sheet):
                     "widthMm": w,
                     "depthMm": h,
                 },
+                "isRectangle": bool(entry.get("isRectangle", False)),
             }
         )
     return boxes
@@ -620,10 +971,10 @@ def _consolidate_sheets(
     """
     if len(sheets_out) <= 1:
         return sheets_out
-    # Very large true-shape jobs: skip consolidate entirely (createBodies dominates).
-    if int(part_count or 0) >= FAST_PACK_PART_THRESHOLD:
-        # Still try a single pass moving the last sheet's parts only.
-        pass
+    # MaxRects already provides good dense-sheet behavior; avoid a quadratic
+    # tail-sheet replay for very large jobs.
+    if int(part_count or 0) >= 100:
+        return sheets_out
     sheets = [dict(sheet, placements=list(sheet.get("placements") or [])) for sheet in sheets_out]
     large = int(part_count or 0) >= 40 or len(sheets) >= 8
     if large:
@@ -676,6 +1027,8 @@ def _consolidate_sheets(
                             spacing,
                             aabb_only=aabb_only,
                             allow_slide=allow_slide,
+                            spatial_index=None,
+                            free_rectangles=None,
                         )
                         if fit is None:
                             continue
@@ -728,14 +1081,75 @@ def _order_seed(parts):
         str(p.get("panelId") or p.get("id") or p.get("bodyName") or i)
         for i, p in enumerate(parts)
     )
-    return abs(hash(identity)) % (2**31)
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    return int(digest[:8], 16)
+
+
+def _deterministic_orders(parts):
+    """Small bounded multi-start set; no global/metaheuristic search."""
+    identity = lambda item: str(
+        item.get("panelId") or item.get("id") or item.get("bodyName") or ""
+    )
+
+    def metrics(item):
+        outline = item.get("outline") if isinstance(item.get("outline"), dict) else {}
+        width = max(_num(item.get("widthMm")), 0.0)
+        depth = max(_num(item.get("depthMm")), 0.0)
+        area = _num(outline.get("areaMm2"), width * depth)
+        long_side = max(width, depth)
+        short_side = max(min(width, depth), 1e-6)
+        return area, long_side, short_side, long_side / short_side
+
+    orders = [
+        sorted(parts, key=_part_sort_key),
+        sorted(
+            parts,
+            key=lambda item: (
+                -metrics(item)[1],
+                -metrics(item)[0],
+                -metrics(item)[3],
+                identity(item),
+            ),
+        ),
+        sorted(
+            parts,
+            key=lambda item: (
+                -metrics(item)[3],
+                -metrics(item)[0],
+                -metrics(item)[2],
+                identity(item),
+            ),
+        ),
+    ]
+    unique = []
+    signatures = set()
+    for order in orders:
+        signature = tuple(identity(item) for item in order)
+        if signature in signatures:
+            continue
+        signatures.add(signature)
+        unique.append(order)
+    return unique
 
 
 def _pack_job(parts, sheet, params):
-    """Pack one material group with BLF + fixed-budget order local search."""
-    ordered = sorted(parts, key=_part_sort_key)
-    best_sheets, best_unplaced = _pack_job_ordered(ordered, sheet, params)
+    """Pack one material group with bounded deterministic hybrid search."""
+    orders = _deterministic_orders(parts)
+    # Large groups get two deterministic passes; exact nearby polygon checks
+    # remain enabled, but no unbounded order exploration is allowed.
+    if len(parts) >= FAST_PACK_PART_THRESHOLD:
+        orders = orders[:2]
+    if len(parts) >= 100:
+        orders = orders[:1]
+    best_sheets = []
+    best_unplaced = list(parts)
     best_score = _pack_score(best_sheets, best_unplaced)
+    ordered = orders[0] if orders else []
+    for trial_order in orders:
+        sheets, unplaced = _pack_job_ordered(trial_order, sheet, params)
+        score = _pack_score(sheets, unplaced)
+        if score < best_score:
+            best_sheets, best_unplaced, best_score = sheets, unplaced, score
     if len(ordered) < 2 or LOCAL_SEARCH_ATTEMPTS <= 0:
         return best_sheets, best_unplaced
 
@@ -822,12 +1236,22 @@ def sheet_pack_layout(
         unplaced.extend(job_unplaced)
 
         sheet_cursor_x = origin_x
+        sheet_cursor_y = type_cursor_y
         row_height = 0.0
+        layout_width = float(params.get("layoutWidthMm") or 0.0)
         for local_sheet in packed_sheets:
             sheet_w = float(local_sheet["widthMm"])
             sheet_h = float(local_sheet["heightMm"])
+            if (
+                layout_width > 0.0
+                and sheet_cursor_x > origin_x + 1e-9
+                and sheet_cursor_x + sheet_w > origin_x + layout_width + 1e-9
+            ):
+                sheet_cursor_x = origin_x
+                sheet_cursor_y += row_height + sheet_gap
+                row_height = 0.0
             sheet_origin_x = sheet_cursor_x
-            sheet_origin_y = type_cursor_y
+            sheet_origin_y = sheet_cursor_y
             sheet_index_global = len(sheets_summary)
             item_index = 0
             for local in local_sheet["placements"]:
@@ -885,7 +1309,7 @@ def sheet_pack_layout(
             max_y = max(max_y, sheet_origin_y + sheet_h)
 
         if packed_sheets:
-            type_cursor_y += row_height + sheet_gap
+            type_cursor_y = sheet_cursor_y + row_height + sheet_gap
 
     return {
         "engine": ENGINE_NAME,
@@ -899,7 +1323,17 @@ def sheet_pack_layout(
         "spacingMm": params["spacingMm"],
         "allowRotation": params["allowRotation"],
         "allowPartsInPart": params["allowPartsInPart"],
-        "partsInPartApplied": False,
+        "partsInPartApplied": any(
+            bool(placement.get("nestedInHole")) for placement in placements
+        ),
+        "nestedInHoleCount": sum(
+            1 for placement in placements if placement.get("nestedInHole")
+        ),
+        "holeOutlineCount": sum(
+            len(((item.get("outline") or {}).get("holes") or []))
+            for item in (items or [])
+            if isinstance(item.get("outline"), dict)
+        ),
         "sheetGapMm": params["sheetGapMm"],
         "sheetParams": params,
         "outlineCounts": outline_counts,

@@ -1104,6 +1104,12 @@ class PanelAttributesController:
         sheet_params = nesting_sheet_pack.normalize_sheet_params(
             (payload or {}).get("sheetParams") or {}
         )
+        # World sheet display wraps within the current Nesting Zone width instead
+        # of expanding every material job into one unbounded horizontal strip.
+        sheet_params["layoutWidthMm"] = max(
+            float(nesting_rect["x1"]) - float(nesting_rect["x0"]),
+            0.0,
+        )
 
         records, _counts, diagnostics = metadata_inspector.scan_panel_metadata(
             root, zone_filter="all", detail="nesting", profiler=profiler
@@ -1327,10 +1333,14 @@ class PanelAttributesController:
             validation_fallback = True
             validation_fallback_reason = (
                 "Primary layout failed collision validation: {} collision(s), "
-                "{} border violation(s)."
+                "{} border violation(s), {} mapping error(s), "
+                "{} sheet overlap(s), exact incomplete={}."
             ).format(
                 int(collision_validation.get("collisionCount") or 0),
                 int(collision_validation.get("borderViolationCount") or 0),
+                int(collision_validation.get("mappingWarningCount") or 0),
+                int(collision_validation.get("sheetOverlapCount") or 0),
+                bool(collision_validation.get("exactValidationIncomplete")),
             )
             profiler.mark(
                 "validationFallback",
@@ -1429,6 +1439,21 @@ class PanelAttributesController:
                     "mappingWarnings": (
                         fallback_validation.get("mappingWarnings") or []
                     )[:100],
+                    "mappingWarningCount": int(
+                        fallback_validation.get("mappingWarningCount") or 0
+                    ),
+                    "sheetOverlaps": (
+                        fallback_validation.get("sheetOverlaps") or []
+                    )[:50],
+                    "sheetOverlapCount": int(
+                        fallback_validation.get("sheetOverlapCount") or 0
+                    ),
+                    "exactValidationIncomplete": bool(
+                        fallback_validation.get("exactValidationIncomplete")
+                    ),
+                    "exactCheckWarnings": (
+                        fallback_validation.get("exactCheckWarnings") or []
+                    )[:50],
                     "validationFallback": True,
                     "validationFallbackReason": validation_fallback_reason,
                     "primaryCollisionValidation": collision_validation,
@@ -1509,6 +1534,7 @@ class PanelAttributesController:
                 layout=measure,
                 sheet_params=sheet_params,
                 wait_callback=_pump_fusion_events,
+                prevalidated_validation=collision_validation,
             )
         except Exception as ex:
             profile = profiler.flush(status="createFailed")
@@ -1634,7 +1660,7 @@ class PanelAttributesController:
             "partGapMm": part_gap,
             "groupGapMm": group_gap,
             "sheetParams": sheet_params,
-            "engine": result.get("engine") or measure.get("engine") or "sheet_pack_poly_v1",
+            "engine": result.get("engine") or measure.get("engine") or "sheet_pack_hybrid_v3",
             "requestedEngine": result.get("requestedEngine")
             or measure.get("requestedEngine"),
             "engineFallback": engine_fallback,
@@ -1649,6 +1675,21 @@ class PanelAttributesController:
             "mappingWarnings": (
                 collision_validation.get("mappingWarnings") or []
             )[:100],
+            "mappingWarningCount": int(
+                collision_validation.get("mappingWarningCount") or 0
+            ),
+            "sheetOverlaps": (
+                collision_validation.get("sheetOverlaps") or []
+            )[:50],
+            "sheetOverlapCount": int(
+                collision_validation.get("sheetOverlapCount") or 0
+            ),
+            "exactValidationIncomplete": bool(
+                collision_validation.get("exactValidationIncomplete")
+            ),
+            "exactCheckWarnings": (
+                collision_validation.get("exactCheckWarnings") or []
+            )[:50],
             "validationFallback": validation_fallback,
             "validationFallbackReason": validation_fallback_reason,
             "primaryCollisionValidation": (
@@ -1670,7 +1711,7 @@ class PanelAttributesController:
                 "profilePath": profile.get("path"),
                 "phasesMs": phases,
                 "bodiesSkippedNoAttrs": skipped_no_attrs,
-                "layoutEngine": result.get("engine") or measure.get("engine") or "sheet_pack_poly_v1",
+                "layoutEngine": result.get("engine") or measure.get("engine") or "sheet_pack_hybrid_v3",
                 "engineFallback": engine_fallback,
                 "engineFallbackReason": engine_fallback_reason,
                 "collisionValidation": collision_validation,
@@ -1691,7 +1732,7 @@ class PanelAttributesController:
                 int(result.get("created") or 0),
                 sheet_count,
                 len(prepared),
-                result.get("engine") or measure.get("engine") or "sheet_pack_poly_v1",
+                result.get("engine") or measure.get("engine") or "sheet_pack_hybrid_v3",
                 len(not_ready),
                 len(failed),
                 skipped_no_attrs,

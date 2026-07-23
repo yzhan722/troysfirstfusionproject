@@ -452,12 +452,22 @@ def layout(
         unplaced.extend(job_unplaced)
 
         sheet_cursor_x = origin_x
+        sheet_cursor_y = type_cursor_y
         row_height = 0.0
+        layout_width = float(params.get("layoutWidthMm") or 0.0)
         for local_sheet in packed_sheets:
             sheet_w = float(local_sheet["widthMm"])
             sheet_h = float(local_sheet["heightMm"])
+            if (
+                layout_width > 0.0
+                and sheet_cursor_x > origin_x + 1e-9
+                and sheet_cursor_x + sheet_w > origin_x + layout_width + 1e-9
+            ):
+                sheet_cursor_x = origin_x
+                sheet_cursor_y += row_height + sheet_gap
+                row_height = 0.0
             sheet_origin_x = sheet_cursor_x
-            sheet_origin_y = type_cursor_y
+            sheet_origin_y = sheet_cursor_y
             sheet_index_global = len(sheets_summary)
             for item_index, local in enumerate(local_sheet["placements"]):
                 placements.append(
@@ -515,7 +525,7 @@ def layout(
             max_x = max(max_x, sheet_origin_x + sheet_w)
             max_y = max(max_y, sheet_origin_y + sheet_h)
         if packed_sheets:
-            type_cursor_y += row_height + sheet_gap
+            type_cursor_y = sheet_cursor_y + row_height + sheet_gap
 
     true_shape_count = outline_counts["flatBody"] + outline_counts["metadataSvg"]
     group_fallbacks = [

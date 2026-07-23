@@ -3,13 +3,6 @@ import os
 import shutil
 import subprocess
 
-def _reload_lounge_fusion_adapter():
-    # Smoke scripts put modules/lounge on sys.path; a top-level import alias can
-    # point at a module object no longer keyed in sys.modules. Re-import then reload.
-    import importlib
-
-    return importlib.reload(importlib.import_module("modules.lounge.fusion_adapter"))
-
 
 def _naming_args(payload, fusion=None):
     """assemblyName / origin from palette payload.
@@ -174,8 +167,12 @@ class LoungeController:
                 "errors": ["Fusion adapter is not available."],
             })
         run_label = payload.get("runLabel") if isinstance(payload, dict) else None
-        # Fusion keeps imported modules cached across add-in restarts; reload so adapter edits take effect.
-        adapter_module = _reload_lounge_fusion_adapter()
+        # Fusion keeps imported modules cached; purge+restart can drop fusion_adapter
+        # from sys.modules while this controller still holds a stale binding. Re-import
+        # then reload so adapter edits always take effect.
+        import importlib
+
+        adapter_module = importlib.reload(importlib.import_module("modules.lounge.fusion_adapter"))
         summary = adapter_module.create_lounge_bodies(self.fusion, result, run_label=run_label, **_naming_args(payload, self.fusion))
         summary["ok"] = len(summary.get("errors") or []) == 0
         summary["action"] = "lounge.createFlatBodies"
@@ -198,7 +195,9 @@ class LoungeController:
                 "errors": ["Fusion adapter is not available."],
             })
         run_label = payload.get("runLabel") if isinstance(payload, dict) else None
-        adapter_module = _reload_lounge_fusion_adapter()
+        import importlib
+
+        adapter_module = importlib.reload(importlib.import_module("modules.lounge.fusion_adapter"))
         summary = adapter_module.create_lounge_assembly_bodies(self.fusion, result, run_label=run_label, **_naming_args(payload, self.fusion))
         summary["ok"] = len(summary.get("errors") or []) == 0
         summary["action"] = "lounge.createAssemblyBodies"

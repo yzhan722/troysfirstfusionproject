@@ -2,7 +2,7 @@ import math
 import os
 import sys
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -16,7 +16,9 @@ if "adsk" not in sys.modules:
     sys.modules["adsk.core"] = adsk.core
     sys.modules["adsk.fusion"] = adsk.fusion
 
+from nesting import fusion_layout  # noqa: E402
 from nesting.fusion_layout import rotation_from_to  # noqa: E402
+from nesting import dxf_export  # noqa: E402
 from nesting.brep_loops import (  # noqa: E402
     directed_coedge_points,
     inner_loop_is_full_through,
@@ -75,6 +77,43 @@ class NestingFusionLayoutMathTests(unittest.TestCase):
         angle, axis = rotation_from_to([0, 0, -1], [0, 0, 1])
         self.assertAlmostEqual(angle, math.pi)
         self.assertAlmostEqual(sum(v * v for v in axis), 1.0)
+
+    def test_workpiece_uses_one_body_marker_and_returns_manifest_record(self):
+        body = MagicMock()
+        placement = {
+            "panelId": "P1",
+            "bodyName": "Source",
+            "boardTypeTag": "carcass",
+            "colorTag": "white",
+            "groupIndex": 0,
+            "itemIndex": 1,
+            "sheetIndex": 2,
+            "rotationDeg": 90,
+        }
+        with patch.object(fusion_layout, "_strip_panel_attributes"), patch.object(
+            fusion_layout, "_set_attr", return_value=True
+        ) as set_attr:
+            details = fusion_layout._mark_workpiece(body, placement, "run-1")
+        self.assertEqual(set_attr.call_count, 1)
+        self.assertEqual(
+            set_attr.call_args.args[1:],
+            (
+                fusion_layout.OUTPUT_MARKER_GROUP,
+                fusion_layout.OUTPUT_MARKER_NAME,
+                "nestingWorkpiece",
+            ),
+        )
+        self.assertEqual(details["sourcePanelId"], "P1")
+        self.assertEqual(details["sheetIndex"], 2)
+
+    def test_dxf_manifest_reader_parses_component_record(self):
+        raw = (
+            '{"version":1,"runId":"r","workpieces":'
+            '{"NEST_A":{"sheetIndex":3,"sourcePanelId":"P9"}}}'
+        )
+        with patch.object(dxf_export, "_attr", return_value=raw):
+            manifest = dxf_export._workpiece_manifest(MagicMock())
+        self.assertEqual(manifest["NEST_A"]["sheetIndex"], 3)
 
     def test_coedge_strokes_follow_reversed_loop_direction(self):
         evaluator = _Evaluator([_Point(0, 0), _Point(0.5, 0.2), _Point(1, 0)])
