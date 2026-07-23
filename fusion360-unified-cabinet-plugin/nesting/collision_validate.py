@@ -24,6 +24,11 @@ BORDER_SLACK_MM = 0.25
 # is not discarded for a single near-miss (sheet_pack is much worse util).
 SPACING_SLACK_MM = 1.0
 MAPPING_TOLERANCE_MM = 0.5
+# ``sheet_pack`` deliberately simplifies packed outlines with a 1 mm
+# Douglas-Peucker tolerance.  That approximation is covered by the validator's
+# 1 mm spacing slack and exact BRep pass, so it must not be treated as a failed
+# transform mapping.  Keep the stricter tolerance above for actual BRep bounds.
+PACKED_OUTLINE_TOLERANCE_MM = 1.0 + 1e-6
 EXACT_CANDIDATE_LIMIT = 64
 MAX_EXACT_BREP_PAIRS = 512
 
@@ -226,22 +231,46 @@ def _sheet_record(layout, placement, params):
 
 
 def _ring_difference_mm(a, b):
-    """Order-independent vertex/bounds drift, suitable for equivalent rings."""
+    """Order-independent boundary/bounds drift for equivalent rings.
+
+    Packed outlines are intentionally simplified before placement.  Comparing
+    vertices directly makes a removed point look far from its two surviving
+    neighbours even when it still lies exactly on the segment between them.
+    Measure point-to-segment distance instead so simplification is not reported
+    as a transform mismatch.
+    """
     a = geometry.close_ring(a)
     b = geometry.close_ring(b)
     if len(a) < 4 or len(b) < 4:
         return float("inf")
+
+    def point_to_boundary(point, ring):
+        px, py = point
+        best = float("inf")
+        for index in range(len(ring) - 1):
+            ax, ay = ring[index]
+            bx, by = ring[index + 1]
+            dx, dy = bx - ax, by - ay
+            length2 = dx * dx + dy * dy
+            if length2 <= 1e-18:
+                distance = math.hypot(px - ax, py - ay)
+            else:
+                t = max(
+                    0.0,
+                    min(1.0, ((px - ax) * dx + (py - ay) * dy) / length2),
+                )
+                distance = math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+            best = min(best, distance)
+        return best
+
     ba, bb = geometry.polygon_bounds(a), geometry.polygon_bounds(b)
     drift = max(
         abs(ba[key] - bb[key])
         for key in ("minX", "minY", "maxX", "maxY")
     )
     for source, target in ((a[:-1], b[:-1]), (b[:-1], a[:-1])):
-        for x, y in source:
-            drift = max(
-                drift,
-                min(math.hypot(x - tx, y - ty) for tx, ty in target),
-            )
+        for point in source:
+            drift = max(drift, point_to_boundary(point, target + [target[0]]))
     return drift
 
 
@@ -258,13 +287,13 @@ def _mapping_warning(entry):
         _ring_difference_mm(entry["shape"]["outer"], candidate)
         for candidate in candidates
     )
-    if drift <= MAPPING_TOLERANCE_MM:
+    if drift <= PACKED_OUTLINE_TOLERANCE_MM:
         return None
     return {
         **_identity(entry),
         "sheetIndex": entry["sheetIndex"],
         "maxDriftMm": drift,
-        "toleranceMm": MAPPING_TOLERANCE_MM,
+        "toleranceMm": PACKED_OUTLINE_TOLERANCE_MM,
         "message": "packedOutline differs from the Fusion creation transform.",
     }
 

@@ -228,6 +228,24 @@ class CollisionValidationTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["mappingWarningCount"], 1)
 
+    def test_simplified_packed_outline_is_not_mapping_drift(self):
+        item = _item(
+            "a",
+            [
+                [0, 0], [5, 0], [10, -0.8], [15, 0], [20, 0],
+                [20, 5], [20, 10], [20, 15], [20, 20],
+                [15, 20], [10, 20], [5, 20], [0, 20],
+                [0, 15], [0, 10], [0, 5],
+            ],
+        )
+        layout = _layout([(item, 10, 10, 0)])
+        layout["placements"][0]["packedOutline"] = [
+            [10, 10.8], [30, 10.8], [30, 30.8], [10, 30.8], [10, 10.8]
+        ]
+        result = validate_layout(layout, [item], _params())
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["mappingWarningCount"], 0)
+
     def test_real_brep_broadphase_only_returns_3d_overlaps(self):
         bounds = {
             0: {"minX": 0, "minY": 0, "minZ": 0, "maxX": 20, "maxY": 20, "maxZ": 2},
